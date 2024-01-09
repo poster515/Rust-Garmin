@@ -252,8 +252,13 @@ checksum = "0688c2a7f92e427f44895cd63841bff7b29f8d7a1648b9e7e07a4a365b2e1257"
 name = "download"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "config",
+ "log",
+ "log4rs",
  "reqwest",
+ "serde",
+ "serde_derive",
 ]
 
 [[package]]
@@ -361,8 +366,10 @@ name = "garmin"
 version = "0.1.0"
 dependencies = [
  "config",
+ "download",
  "log",
  "log4rs",
+ "serde_derive",
 ]
 
 [[package]]

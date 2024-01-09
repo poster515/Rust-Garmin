@@ -1,12 +1,10 @@
 
 use log::{error, info, warn, debug};
 
-use serde_derive::Deserialize;
+use config::{Config, File, FileFormat};
+// use float_cmp::ApproxEqUlps;
 
-use std::path::PathBuf;
-
-use config::{Config, File, FileFormat, Map, Value};
-use float_cmp::ApproxEqUlps;
+use download::DownloadManager;
 
 fn main() {
     // takes various command line args, runs download once and exits
@@ -17,6 +15,8 @@ fn main() {
 
     // create config for use with downloader
     let config = Config::builder().add_source(File::new("tests/Settings", FileFormat::Json)).build().unwrap();
+
+    let download_manager = DownloadManager::new(config);
     
     debug!("Mary has a little lamb");
     error!("{}", "Its fleece was white as snow");

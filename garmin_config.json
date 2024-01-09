@@ -1,6 +1,6 @@
 {
     "garmin": {
-        "domain": "garmin.com"
+        "domain": "https://www.garmin.com"
     },
     "credentials": {
         "user"                          : "joe@shmoe.com",
@@ -15,9 +15,6 @@
         "download_latest_activities"    : 25,
         "download_all_activities"       : 1000
     },
-    "copy": {
-        "mount_dir"                     : "/Volumes/GARMIN"
-    },
     "enabled_stats": {
         "monitoring"                    : true,
         "steps"                         : true,
@@ -26,13 +23,5 @@
         "rhr"                           : true,
         "weight"                        : true,
         "activities"                    : true
-    },
-    "course_views": {
-        "steps"                         : []
-    },
-    "modes": {
-    },
-    "activities": {
-        "display"                       : []
     }
 }

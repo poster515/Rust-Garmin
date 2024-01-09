@@ -8,3 +8,8 @@ edition = "2021"
 [dependencies]
 reqwest = "0.11"
 config = "0.13.4"
+serde_derive = "1.0.195"
+serde = "1.0.195"
+log = "0.4.20"
+log4rs = "1.2.0"
+chrono = "0.4.31"

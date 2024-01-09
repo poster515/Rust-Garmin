@@ -9,3 +9,6 @@ edition = "2021"
 log = "0.4.20"
 log4rs = "1.2.0"
 config = "0.13.4"
+serde_derive = "1.0.195"
+
+download = { path = "../download" }
