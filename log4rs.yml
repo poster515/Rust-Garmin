@@ -5,22 +5,32 @@ appenders:
     kind: console
 
   garmin:
-    kind: file
+    kind: rolling_file
     path: "/var/log/requests.log"
     encoder:
       pattern: "{d} - {m}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 30 mb
+      roller:
+        kind: fixed_window
+        pattern: logs/step/step_{}.gz
+        count: 5
+        base: 1
 
 root:
-  level: warn
+  level: debug
   appenders:
     - stdout
 
 loggers:
   app::backend::db:
-    level: info
+    level: debug
 
   app::garmin:
-    level: info
+    level: debug
     appenders:
       - garmin
+      - stdout
     additive: false

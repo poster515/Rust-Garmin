@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.20"
-log4rs = "1.2.0"
+log4rs = { version = "1.2.0", features = ["gzip"] }
 config = "0.13.4"
 serde_derive = "1.0.195"
-
+anyhow = "1.0.79"
 download = { path = "../download" }

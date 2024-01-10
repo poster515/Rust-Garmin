@@ -1,5 +1,4 @@
 
-use chrono::{DateTime, Local};
 use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
@@ -15,30 +14,30 @@ pub struct Credentials {
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct EnabledStats {
-    monitoring: bool,
-    steps: bool,
-    itime: bool,
-    sleep: bool,
-    rhr: bool,
-    weight: bool,
-    activities: bool
+pub struct DataConfig {
+    pub weight_start_date: String,
+    pub sleep_start_date: String,
+    pub rhr_start_date: String,
+    pub monitoring_start_date: String,
+    pub download_latest_activities: String,
+    pub download_all_activities: String
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct DataConfig {
-    weight_start_date: DateTime<Local>,
-    sleep_start_date: DateTime<Local>,
-    rhr_start_date: DateTime<Local>,
-    monitoring_start_date: DateTime<Local>,
-    download_latest_activities: DateTime<Local>,
-    download_all_activities: DateTime<Local>
+pub struct EnabledStats {
+    pub monitoring: bool,
+    pub steps: bool,
+    pub itime: bool,
+    pub sleep: bool,
+    pub rhr: bool,
+    pub weight: bool,
+    pub activities: bool
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct GarminConfig {
-    pub domain: Domain,
+    pub garmin: Domain,
     pub credentials: Credentials,
-    data_config: DataConfig,
-    enabled_stats: EnabledStats
+    pub data: DataConfig,
+    pub enabled_stats: EnabledStats
 }

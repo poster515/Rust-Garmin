@@ -1,7 +1,7 @@
 
 use config::Config;
 use reqwest::blocking::Client;
-use log::{error, info, warn, debug};
+use log::{info, debug};
 
 mod garmin_config;
 
@@ -76,9 +76,9 @@ impl DownloadManager {
 impl DownloadTraits for DownloadManager {
     fn login(&mut self) -> Result<bool, DownloadError>{
         // connect to domain using login url
-        let username = self.garmin_config.credentials.user;
-        let password = self.garmin_config.credentials.password;
-        let domain = self.garmin_config.domain.domain;
+        let username: &str = &self.garmin_config.credentials.user;
+        let password: &str = &self.garmin_config.credentials.password;
+        let domain: &str = &self.garmin_config.garmin.domain;
 
         debug!("login: {}: {}", username, password);
 
@@ -86,7 +86,7 @@ impl DownloadTraits for DownloadManager {
             .basic_auth(username, Some(password))
             .send();
 
-        println!("{:?}", response);
+        info!("{:?}", response);
 
         Ok(true)
     }
