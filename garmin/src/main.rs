@@ -7,6 +7,7 @@ use config::{Config, File, FileFormat};
 
 use download::{DownloadManager, DownloadTraits};
 
+#[allow(unused_must_use)]
 fn main() -> Result<(), Error> {
     // takes various command line args, runs download once and exits
 
@@ -41,6 +42,8 @@ fn main() -> Result<(), Error> {
                     } else {
                         warn!("Unable to login!");
                     }
+
+                    _download_manager.get_activity_types();
                 },
                 Err(_) => {
                     println!("Error logging in :(")
