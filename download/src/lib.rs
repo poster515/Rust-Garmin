@@ -1,9 +1,6 @@
 
 use config::Config;
-use reqwest::blocking::Client;
-use log::{info, debug};
-use url_builder::URLBuilder;
-use reqwest;
+use log::debug;
 
 mod garmin_config;
 mod garmin_client;
@@ -12,6 +9,7 @@ pub use crate::garmin_client::{GarminClient, ClientTraits};
 pub use crate::garmin_config::GarminConfig;
 
 // Class for downloading health data from Garmin Connect.
+#[allow(dead_code)]
 pub struct DownloadManager {
     
     garmin_connect_user_profile_url: String,
@@ -45,7 +43,7 @@ pub trait DownloadTraits {
     // fn save_to_json_file(&mut self) -> Result<bool, DownloadError>;
 }
 
-#[allow(unused_variables)]
+#[allow(dead_code)]
 impl DownloadManager {
     pub fn new(config: Config) -> DownloadManager {
         DownloadManager {
@@ -82,7 +80,7 @@ impl DownloadTraits for DownloadManager {
 
         debug!("login domain: {}, username: {}, password: {}", domain, username, password);
 
-        self.garmin_client.login();
+        self.garmin_client.login(username, password);
     }
 
     fn get_activity_types(&mut self) {

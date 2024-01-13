@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11", features = ["blocking", "cookies"] }
+reqwest = { version = "0.11", features = ["blocking", "cookies", "multipart"] }
 config = "0.13.4"
 serde_derive = "1.0.195"
 serde = "1.0.195"
@@ -15,3 +15,5 @@ log4rs = "1.2.0"
 chrono = "0.4.31"
 url = "2.5.0"
 url-builder = "0.1.1"
+regex = "1.10.2"
+serde_json = "1.0.111"

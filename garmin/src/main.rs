@@ -1,5 +1,5 @@
 use std::env;
-use log::{error, info, warn, debug};
+use log::{error, info};
 use anyhow::Error;
 
 use config::{Config, File, FileFormat};

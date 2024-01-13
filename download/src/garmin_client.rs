@@ -1,13 +1,14 @@
 
 use std::collections::HashMap;
-use log::{error, debug};
+use log::{error, debug, warn};
+use regex::Regex;
 use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::blocking::Response;
 use reqwest::header::HeaderMap;
 
 pub trait ClientTraits {
-    fn login(&mut self) -> ();
+    fn login(&mut self, username: &str, password: &str) -> ();
     fn request(&mut self, subdomain: &str, endpoint: &str) -> ();
     fn get_session(&mut self, domain: &str, username: &str, password: &str) -> ();
 }
@@ -26,6 +27,25 @@ impl GarminClient {
             client: Client::builder().cookie_store(true).build().unwrap(),
             auth_host: String::from("https://sso.garmin.com/sso"),
         }
+    }
+
+    fn build_singin_url(&self) -> String {
+        let mut sso_embed = String::from(&self.auth_host);
+        sso_embed.push_str("/embed");
+
+        let mut ub = url_builder::URLBuilder::new();
+        ub.set_protocol("https")
+            .set_host("sso.garmin.com")
+            .add_route("sso")
+            .add_route("signin")
+            .add_param("id", "gauth-widget")
+            .add_param("embedWidget", "true")
+            .add_param("gauthHost", &sso_embed[..])
+            .add_param("service", &sso_embed[..])
+            .add_param("source", &sso_embed[..])
+            .add_param("redirectAfterAccountLoginUrl", &sso_embed[..])
+            .add_param("redirectAfterAccountCreationUrl", &sso_embed[..]);
+        ub.build()
     }
 
     fn set_cookie(&mut self) -> Result<Response, reqwest::Error> {
@@ -47,27 +67,8 @@ impl GarminClient {
     }
 
     fn get_csrf_token(&mut self, referer_url: &Url) -> Result<Response, reqwest::Error> {
-        let mut sso_embed = String::from(&self.auth_host);
-        sso_embed.push_str("/embed");
 
-        let mut ub = url_builder::URLBuilder::new();
-        ub.set_protocol("https")
-            .set_host("sso.garmin.com")
-            .add_route("sso")
-            .add_route("signin")
-            .add_param("id", "gauth-widget")
-            .add_param("embedWidget", "true")
-            .add_param("gauthHost", &sso_embed[..])
-            .add_param("service", &sso_embed[..])
-            .add_param("source", &sso_embed[..])
-            .add_param("redirectAfterAccountLoginUrl", &sso_embed[..])
-            .add_param("redirectAfterAccountCreationUrl", &sso_embed[..]);
-        let url = ub.build();
-
-        debug!("====================================================");
-        debug!("Requesting url: {}", url);
-        debug!("====================================================");
-
+        let url = self.build_singin_url();
         let mut headers = HeaderMap::new();
         headers.insert("referer", referer_url.as_str().parse().unwrap());
         
@@ -76,25 +77,88 @@ impl GarminClient {
             .headers(headers)
             .send()
     }
+
+    fn submit_login(&self, username: &str, password: &str, referer_url: &Url, csrf_token: &str) -> () {
+        let url = self.build_singin_url();
+        let mut headers = HeaderMap::new(); 
+        headers.insert("referer", referer_url.as_str().parse().unwrap());
+
+        let form = HashMap::from([
+            ("username", String::from(username)),
+            ("password", String::from(password)),
+            ("embed", String::from("true")),
+            ("_csrf", String::from(csrf_token))
+        ]);
+        
+        let login_response: Response = self.client.post(&url)
+            .headers(headers)
+            .form(&form)
+            .send()
+            .unwrap();
+
+        let login_html: String = login_response.text().unwrap();
+
+        self.parse_title(&login_html);
+
+    }
+
+    fn parse_csrf_token(&self, response_html: &String) -> String {
+        let re = Regex::new(r#"name="_csrf"\s+value="(\w+)"#).unwrap();
+        for (_, [csrf]) in re.captures_iter(&response_html).map(|c| c.extract()) {
+            debug!("====================================================");
+            debug!("Found csrf token: {}", csrf);
+            debug!("====================================================");
+            return String::from(csrf);
+        }
+        error!("====================================================");
+        error!("Unable to find csrf token in body: {}", response_html);
+        error!("====================================================");
+        String::new()
+    }
+
+    fn parse_title(&self, response_html: &String) -> String {
+        let re = Regex::new(r#"<title>(.+?)</title>"#).unwrap();
+        for (_, [csrf]) in re.captures_iter(&response_html).map(|c| c.extract()) {
+
+            debug!("====================================================");
+            if csrf == "Success" {
+                debug!("Got successful login!");
+            } else if csrf == "GARMIN Authentication Application" {
+                error!("Got unsuccessful login :( check your credentials?");
+            } else {
+                warn!("Unsure how to process login response {}", csrf);
+            }
+            debug!("====================================================");
+            return String::from(csrf);
+        }
+        error!("====================================================");
+        error!("Unable to find title in body: {}", response_html);
+        error!("====================================================");
+        String::new()
+    }
+
 }
 
 #[allow(unused_variables)]
 impl ClientTraits for GarminClient {
-    fn login(&mut self) -> () {
+    fn login(&mut self, username: &str, password: &str) -> () {
 
         // set cookies
-        let auth_response = self.set_cookie().unwrap();
+        let auth_response: Response = self.set_cookie().unwrap();
+        let referer_url: &Url = auth_response.url();
 
         // get csrf token
-        let referer_url: &Url = auth_response.url();
-        let csrf_response = self.get_csrf_token(referer_url).unwrap();
-
-        debug!("{}", csrf_response.text().unwrap());
+        let csrf_response: Response = self.get_csrf_token(referer_url).unwrap();
+        let referer_url: Url = csrf_response.url().clone();
+        let csrf_html: String = csrf_response.text().unwrap();
+        let csrf_token = self.parse_csrf_token(&csrf_html);
         
-        // let csrf_token = get_csrf_token(csrf_response.text());
+        if csrf_token.len() == 0 {
+            return
+        }
 
         // Submit login form with email and password
-
+        self.submit_login(username, password, &referer_url, &csrf_token);
     }
 
     fn request(&mut self, subdomain: &str, endpoint: &str) -> () {
