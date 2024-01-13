@@ -34,21 +34,8 @@ fn main() -> Result<(), Error> {
             info!("Successfully loaded garmin config!");
 
             let mut _download_manager = DownloadManager::new(config);
-            let login_result = _download_manager.login();
-            match login_result {
-                Ok(success) => {
-                    if success {
-                        info!("Successfully logged in!");
-                    } else {
-                        warn!("Unable to login!");
-                    }
-
-                    _download_manager.get_activity_types();
-                },
-                Err(_) => {
-                    println!("Error logging in :(")
-                }
-            }
+            _download_manager.login();
+            _download_manager.get_activity_types();
         },
         Err(error) => {
             error!("Error loading log config: {:}", error);

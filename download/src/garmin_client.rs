@@ -1,36 +1,99 @@
 
 use std::collections::HashMap;
-use config::Config;
-use log::error;
+use log::{error, debug};
+use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::blocking::Response;
+use reqwest::header::HeaderMap;
 
-trait ClientTraits {
+pub trait ClientTraits {
     fn login(&mut self) -> ();
     fn request(&mut self, subdomain: &str, endpoint: &str) -> ();
     fn get_session(&mut self, domain: &str, username: &str, password: &str) -> ();
 }
 
-
+// struct that knows how to navigate the auth flow for garmin connect api.
 pub struct GarminClient {
     client: Client,
-    garmin_signin_headers: &'static str
+    auth_host: String
 }
 
 impl GarminClient {
     // shamelessly adopted from:
     // https://github.com/cpfair/tapiriik/blob/master/tapiriik/services/GarminConnect/garminconnect.py#L10
-    pub fn new(config: &Config) -> GarminClient {
+    pub fn new() -> GarminClient {
         GarminClient {
             client: Client::builder().cookie_store(true).build().unwrap(),
-            garmin_signin_headers: "https://sso.garmin.com"
+            auth_host: String::from("https://sso.garmin.com/sso"),
         }
+    }
+
+    fn set_cookie(&mut self) -> Result<Response, reqwest::Error> {
+        let mut ub = url_builder::URLBuilder::new();
+        ub.set_protocol("https")
+            .set_host("sso.garmin.com")
+            .add_route("sso")
+            .add_route("embed")
+            .add_param("id", "gauth-widget")
+            .add_param("embedWidget", "true")
+            .add_param("gauthHost", &self.auth_host);
+        let url = ub.build();
+
+        debug!("====================================================");
+        debug!("Requesting url: {}", url);
+        debug!("====================================================");
+
+        self.client.get(&url).send()
+    }
+
+    fn get_csrf_token(&mut self, referer_url: &Url) -> Result<Response, reqwest::Error> {
+        let mut sso_embed = String::from(&self.auth_host);
+        sso_embed.push_str("/embed");
+
+        let mut ub = url_builder::URLBuilder::new();
+        ub.set_protocol("https")
+            .set_host("sso.garmin.com")
+            .add_route("sso")
+            .add_route("signin")
+            .add_param("id", "gauth-widget")
+            .add_param("embedWidget", "true")
+            .add_param("gauthHost", &sso_embed[..])
+            .add_param("service", &sso_embed[..])
+            .add_param("source", &sso_embed[..])
+            .add_param("redirectAfterAccountLoginUrl", &sso_embed[..])
+            .add_param("redirectAfterAccountCreationUrl", &sso_embed[..]);
+        let url = ub.build();
+
+        debug!("====================================================");
+        debug!("Requesting url: {}", url);
+        debug!("====================================================");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("referer", referer_url.as_str().parse().unwrap());
+        
+        // get csrf token
+        self.client.get(&url)
+            .headers(headers)
+            .send()
     }
 }
 
 #[allow(unused_variables)]
 impl ClientTraits for GarminClient {
     fn login(&mut self) -> () {
+
+        // set cookies
+        let auth_response = self.set_cookie().unwrap();
+
+        // get csrf token
+        let referer_url: &Url = auth_response.url();
+        let csrf_response = self.get_csrf_token(referer_url).unwrap();
+
+        debug!("{}", csrf_response.text().unwrap());
+        
+        // let csrf_token = get_csrf_token(csrf_response.text());
+
+        // Submit login form with email and password
 
     }
 

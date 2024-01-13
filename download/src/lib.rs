@@ -8,7 +8,7 @@ use reqwest;
 mod garmin_config;
 mod garmin_client;
 
-pub use crate::garmin_client::GarminClient;
+pub use crate::garmin_client::{GarminClient, ClientTraits};
 pub use crate::garmin_config::GarminConfig;
 
 // Class for downloading health data from Garmin Connect.
@@ -67,7 +67,7 @@ impl DownloadManager {
             // https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/hydration/allData/2019-11-29
         
             download_days_overlap: 3,  // Existing donloaded data will be redownloaded and overwritten if it is within this number of days of now.
-            garmin_client: GarminClient::new(&config),
+            garmin_client: GarminClient::new(),
             garmin_config: config.try_deserialize().unwrap()
         }
     }
@@ -80,12 +80,11 @@ impl DownloadTraits for DownloadManager {
         let password: &str = &self.garmin_config.credentials.password;
         let domain: &str = &self.garmin_config.garmin.domain;
 
-        debug!("login domain{}: {}: {}", domain, username, password);
+        debug!("login domain: {}, username: {}, password: {}", domain, username, password);
 
-        let response = self.garmin_client.get_session(domain,
-            username,
-            password);
+        self.garmin_client.login();
     }
+
     fn get_activity_types(&mut self) {
         
     }
