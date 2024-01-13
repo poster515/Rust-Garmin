@@ -84,7 +84,15 @@ impl DownloadTraits for DownloadManager {
     }
 
     fn get_activity_types(&mut self) {
-        
+
+        let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
+        endpoint.push_str("/activityTypes");
+
+        self.garmin_client.api_request(&endpoint);
+
+        // endpoint: {garmin_connect_activity_service_url}/activityTypes
+        // request("connectapi.garmin.com")
+
     }
     fn get_activities(&mut self) {
 

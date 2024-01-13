@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use log::{error, debug, warn};
 use regex::Regex;
+use reqwest::Error;
 use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::blocking::Response;
@@ -9,14 +10,18 @@ use reqwest::header::HeaderMap;
 
 pub trait ClientTraits {
     fn login(&mut self, username: &str, password: &str) -> ();
-    fn request(&mut self, subdomain: &str, endpoint: &str) -> ();
+    fn api_request(&mut self, endpoint: &str) -> ();
     fn get_session(&mut self, domain: &str, username: &str, password: &str) -> ();
 }
 
 // struct that knows how to navigate the auth flow for garmin connect api.
 pub struct GarminClient {
     client: Client,
-    auth_host: String
+    auth_host: String,
+    api_host: String,
+    last_resp_url: String,
+    last_resp_text: String,
+    user_agent: HashMap<String, String>
 }
 
 impl GarminClient {
@@ -26,6 +31,10 @@ impl GarminClient {
         GarminClient {
             client: Client::builder().cookie_store(true).build().unwrap(),
             auth_host: String::from("https://sso.garmin.com/sso"),
+            api_host: String::from("https://connectapi.garmin.com"),
+            last_resp_url: String::new(),
+            last_resp_text: String::new(),
+            user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())])
         }
     }
 
@@ -48,7 +57,10 @@ impl GarminClient {
         ub.build()
     }
 
-    fn set_cookie(&mut self) -> Result<Response, reqwest::Error> {
+    fn set_cookie(&mut self) -> bool {
+        /*
+        Called before actual login so we can get csrf token.
+        */
         let mut ub = url_builder::URLBuilder::new();
         ub.set_protocol("https")
             .set_host("sso.garmin.com")
@@ -63,25 +75,39 @@ impl GarminClient {
         debug!("Requesting url: {}", url);
         debug!("====================================================");
 
-        self.client.get(&url).send()
+        let response = self.client.get(&url).send();
+        match response {
+            Ok(response) => {
+                self.last_resp_url = response.url().to_string();
+                self.last_resp_text = response.text().unwrap();
+                true
+            },
+            Err(_) => false
+        }
     }
 
-    fn get_csrf_token(&mut self, referer_url: &Url) -> Result<Response, reqwest::Error> {
+    fn get_csrf_token(&mut self) -> bool {
 
         let url = self.build_singin_url();
         let mut headers = HeaderMap::new();
-        headers.insert("referer", referer_url.as_str().parse().unwrap());
+        headers.insert("referer", self.last_resp_url.as_str().parse().unwrap());
         
         // get csrf token
-        self.client.get(&url)
-            .headers(headers)
-            .send()
+        let response = self.client.get(&url).headers(headers).send();
+        match response {
+            Ok(response) => {
+                self.last_resp_url = response.url().to_string();
+                self.last_resp_text = response.text().unwrap();
+                true
+            },
+            Err(_) => false
+        }
     }
 
-    fn submit_login(&self, username: &str, password: &str, referer_url: &Url, csrf_token: &str) -> () {
+    fn submit_login(&mut self, username: &str, password: &str, csrf_token: &str) -> bool {
         let url = self.build_singin_url();
         let mut headers = HeaderMap::new(); 
-        headers.insert("referer", referer_url.as_str().parse().unwrap());
+        headers.insert("referer", self.last_resp_url.as_str().parse().unwrap());
 
         let form = HashMap::from([
             ("username", String::from(username)),
@@ -90,16 +116,19 @@ impl GarminClient {
             ("_csrf", String::from(csrf_token))
         ]);
         
-        let login_response: Response = self.client.post(&url)
+        let login_response = self.client.post(&url)
             .headers(headers)
             .form(&form)
-            .send()
-            .unwrap();
+            .send();
 
-        let login_html: String = login_response.text().unwrap();
-
-        self.parse_title(&login_html);
-
+        match login_response {
+            Ok(response) => {
+                self.last_resp_url = response.url().to_string();
+                self.last_resp_text = response.text().unwrap();
+                true
+            },
+            Err(_) => false
+        }
     }
 
     fn parse_csrf_token(&self, response_html: &String) -> String {
@@ -118,21 +147,36 @@ impl GarminClient {
 
     fn parse_title(&self, response_html: &String) -> String {
         let re = Regex::new(r#"<title>(.+?)</title>"#).unwrap();
-        for (_, [csrf]) in re.captures_iter(&response_html).map(|c| c.extract()) {
+        for (_, [title]) in re.captures_iter(&response_html).map(|c| c.extract()) {
 
             debug!("====================================================");
-            if csrf == "Success" {
+            if title == "Success" {
                 debug!("Got successful login!");
-            } else if csrf == "GARMIN Authentication Application" {
+                return String::from(title);
+            } else if title == "GARMIN Authentication Application" {
                 error!("Got unsuccessful login :( check your credentials?");
             } else {
-                warn!("Unsure how to process login response {}", csrf);
+                warn!("Unsure how to process login response {}", title);
             }
             debug!("====================================================");
-            return String::from(csrf);
         }
         error!("====================================================");
         error!("Unable to find title in body: {}", response_html);
+        error!("====================================================");
+        String::new()
+    }
+
+    fn parse_ticket(&self, response_html: &String) -> String {
+        let re = Regex::new(r#"embed\?ticket=([^"]+)""#).unwrap();
+        for (_, [ticket]) in re.captures_iter(&response_html).map(|c| c.extract()) {
+
+            debug!("====================================================");
+            debug!("Found ticket: {}", ticket);
+            debug!("====================================================");
+            return String::from(ticket);
+        }
+        error!("====================================================");
+        error!("Unable to find ticket in body: {}", response_html);
         error!("====================================================");
         String::new()
     }
@@ -144,24 +188,38 @@ impl ClientTraits for GarminClient {
     fn login(&mut self, username: &str, password: &str) -> () {
 
         // set cookies
-        let auth_response: Response = self.set_cookie().unwrap();
-        let referer_url: &Url = auth_response.url();
+        if !self.set_cookie() {
+            return
+        }
 
         // get csrf token
-        let csrf_response: Response = self.get_csrf_token(referer_url).unwrap();
-        let referer_url: Url = csrf_response.url().clone();
-        let csrf_html: String = csrf_response.text().unwrap();
-        let csrf_token = self.parse_csrf_token(&csrf_html);
+        if !self.get_csrf_token() {
+            return
+        }
+        
+        let csrf_token = self.parse_csrf_token(&self.last_resp_text);
         
         if csrf_token.len() == 0 {
             return
         }
 
         // Submit login form with email and password
-        self.submit_login(username, password, &referer_url, &csrf_token);
+        self.submit_login(username, password, &csrf_token);
+        let title = self.parse_title(&self.last_resp_text);
+        if title.len() == 0 {
+            return
+        }
+
+        let ticket = self.parse_ticket(&self.last_resp_text);
+        if ticket.len() == 0 {
+            return;
+        }
     }
 
-    fn request(&mut self, subdomain: &str, endpoint: &str) -> () {
+    fn api_request(&mut self, endpoint: &str) -> () {
+        // use for actual application data downloads
+
+        // TODO: give filename for saving json data
 
     }
 

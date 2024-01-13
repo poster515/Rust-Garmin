@@ -19,7 +19,7 @@ pub struct DataConfig {
     pub sleep_start_date: String,
     pub rhr_start_date: String,
     pub monitoring_start_date: String,
-    pub download_latest_activities: String,
+    pub num_activities_to_download: String,
     pub download_all_activities: String
 }
 
