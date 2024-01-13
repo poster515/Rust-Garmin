@@ -35,7 +35,9 @@ fn main() -> Result<(), Error> {
 
             let mut _download_manager = DownloadManager::new(config);
             _download_manager.login();
-            _download_manager.get_activity_types();
+            // _download_manager.get_profile_name();
+            // _download_manager.get_activity_types();
+
         },
         Err(error) => {
             error!("Error loading log config: {:}", error);

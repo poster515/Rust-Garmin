@@ -2,24 +2,22 @@
 use std::collections::HashMap;
 use log::{error, debug, warn};
 use regex::Regex;
-use reqwest::Error;
-use reqwest::Url;
 use reqwest::blocking::Client;
-use reqwest::blocking::Response;
 use reqwest::header::HeaderMap;
 
 pub trait ClientTraits {
     fn login(&mut self, username: &str, password: &str) -> ();
     fn api_request(&mut self, endpoint: &str) -> ();
-    fn get_session(&mut self, domain: &str, username: &str, password: &str) -> ();
 }
 
 // struct that knows how to navigate the auth flow for garmin connect api.
 pub struct GarminClient {
     client: Client,
     auth_host: String,
-    last_resp_url: String,
-    last_resp_text: String,
+    last_sso_resp_url: String,
+    last_sso_resp_text: String,
+    last_api_resp_url: String,
+    last_api_resp_text: String,
     user_agent: HashMap<String, String>
 }
 
@@ -30,8 +28,10 @@ impl GarminClient {
         GarminClient {
             client: Client::builder().cookie_store(true).build().unwrap(),
             auth_host: String::from("https://sso.garmin.com/sso"),
-            last_resp_url: String::new(),
-            last_resp_text: String::new(),
+            last_sso_resp_url: String::new(),
+            last_sso_resp_text: String::new(),
+            last_api_resp_url: String::new(),
+            last_api_resp_text: String::new(),
             user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())])
         }
     }
@@ -85,8 +85,8 @@ impl GarminClient {
         let response = self.client.get(&url).send();
         match response {
             Ok(response) => {
-                self.last_resp_url = response.url().to_string();
-                self.last_resp_text = response.text().unwrap();
+                self.last_sso_resp_url = response.url().to_string();
+                self.last_sso_resp_text = response.text().unwrap();
                 true
             },
             Err(_) => false
@@ -97,14 +97,14 @@ impl GarminClient {
 
         let url = self.build_singin_url();
         let mut headers = HeaderMap::new();
-        headers.insert("referer", self.last_resp_url.as_str().parse().unwrap());
+        headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
         
         // get csrf token
         let response = self.client.get(&url).headers(headers).send();
         match response {
             Ok(response) => {
-                self.last_resp_url = response.url().to_string();
-                self.last_resp_text = response.text().unwrap();
+                self.last_sso_resp_url = response.url().to_string();
+                self.last_sso_resp_text = response.text().unwrap();
                 true
             },
             Err(_) => false
@@ -114,7 +114,7 @@ impl GarminClient {
     fn submit_login(&mut self, username: &str, password: &str, csrf_token: &str) -> bool {
         let url = self.build_singin_url();
         let mut headers = HeaderMap::new(); 
-        headers.insert("referer", self.last_resp_url.as_str().parse().unwrap());
+        headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
 
         let form = HashMap::from([
             ("username", String::from(username)),
@@ -130,8 +130,8 @@ impl GarminClient {
 
         match login_response {
             Ok(response) => {
-                self.last_resp_url = response.url().to_string();
-                self.last_resp_text = response.text().unwrap();
+                self.last_sso_resp_url = response.url().to_string();
+                self.last_sso_resp_text = response.text().unwrap();
                 true
             },
             Err(_) => false
@@ -204,7 +204,7 @@ impl ClientTraits for GarminClient {
             return
         }
         
-        let csrf_token = self.parse_csrf_token(&self.last_resp_text);
+        let csrf_token = self.parse_csrf_token(&self.last_sso_resp_text);
         
         if csrf_token.len() == 0 {
             return
@@ -212,20 +212,18 @@ impl ClientTraits for GarminClient {
 
         // Submit login form with email and password
         self.submit_login(username, password, &csrf_token);
-        let title = self.parse_title(&self.last_resp_text);
+        let title = self.parse_title(&self.last_sso_resp_text);
         if title.len() == 0 {
             return
         }
 
-        let ticket = self.parse_ticket(&self.last_resp_text);
+        let ticket = self.parse_ticket(&self.last_sso_resp_text);
         if ticket.len() == 0 {
             return;
         }
 
         // TODO: set oauth1 and oauth2 tokens
-        // ticket = ST-02071158-4h0CAwVTCgb2c03FdrDw-cas
-        // oauth1 = self.get_oauth1_token(ticket);
-        // oauth2 = self.exchange(oauth1);
+        // TODO: do we even need oauth tokens?
     }
 
     fn api_request(&mut self, endpoint: &str) -> () {
@@ -238,53 +236,13 @@ impl ClientTraits for GarminClient {
 
         match response {
             Ok(resp) => {
-                debug!("Got api response: {}", resp.text().unwrap());
+                self.last_api_resp_url = resp.url().to_string();
+                self.last_api_resp_text = resp.text().unwrap();
+                debug!("Got api response: {}", &self.last_api_resp_text);
             }, 
             Err(e) => {
                 error!("Unable to send api request: {:?}", e);
             }
-        }
-    }
-
-    fn get_session(&mut self, domain: &str, username: &str, password: &str) -> () {
-        // TODO: cache credentials and store them
-
-        let mut data = HashMap::new();
-        data.insert("username", username);
-        data.insert("password", password);
-        data.insert("_eventId", "submit");
-        data.insert("embed", "true");
-        // data.insert("displayNameRequired", "false");
-
-        let mut params = HashMap::new();
-        params.insert("service", "https://connect.garmin.com/modern");
-        // params.insert("redirectAfterAccountLoginUrl", "http://connect.garmin.com/modern");
-        // params.insert("redirectAfterAccountCreationUrl", "http://connect.garmin.com/modern");
-        // params.insert("webhost", "olaxpw-connect00.garmin.com");
-        params.insert("clientId", "GarminConnect");
-        params.insert("gauthHost", "https://sso.garmin.com/sso");
-        // params.insert("rememberMeShown", "true");
-        // params.insert("rememberMeChecked", "false");
-        params.insert("consumeServiceTicket", "false");
-        // params.insert("id", "gauth-widget");
-        // params.insert("embedWidget", "false");
-        // params.insert("cssUrl", "https://static.garmincdn.com/com.garmin.connect/ui/src-css/gauth-custom.css");
-        // params.insert("source", "http://connect.garmin.com/en-US/signin");
-        // params.insert("createAccountShown", "true");
-        // params.insert("openCreateAccount", "false");
-        // params.insert("usernameShown", "true");
-        // params.insert("displayNameShown", "false");
-        // params.insert("initialFocus", "true");
-        // params.insert("locale", "en");
-
-        
-        let res: Response = self.client.get(domain)
-            .query(&params)
-            .send()
-            .unwrap();
-
-        if !res.status().is_success() {
-            error!("Got non success status code: {}", res.status());
         }
     }
 }
