@@ -18,7 +18,6 @@ pub trait ClientTraits {
 pub struct GarminClient {
     client: Client,
     auth_host: String,
-    api_host: String,
     last_resp_url: String,
     last_resp_text: String,
     user_agent: HashMap<String, String>
@@ -31,7 +30,6 @@ impl GarminClient {
         GarminClient {
             client: Client::builder().cookie_store(true).build().unwrap(),
             auth_host: String::from("https://sso.garmin.com/sso"),
-            api_host: String::from("https://connectapi.garmin.com"),
             last_resp_url: String::new(),
             last_resp_text: String::new(),
             user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())])
@@ -55,6 +53,15 @@ impl GarminClient {
             .add_param("redirectAfterAccountLoginUrl", &sso_embed[..])
             .add_param("redirectAfterAccountCreationUrl", &sso_embed[..]);
         ub.build()
+    }
+
+    fn build_api_url(&self, endpoint: &str) -> url_builder::URLBuilder {
+
+        let mut ub = url_builder::URLBuilder::new();
+        ub.set_protocol("https")
+            .set_host("connectapi.garmin.com")
+            .add_route(endpoint);
+        ub
     }
 
     fn set_cookie(&mut self) -> bool {
@@ -214,13 +221,29 @@ impl ClientTraits for GarminClient {
         if ticket.len() == 0 {
             return;
         }
+
+        // TODO: set oauth1 and oauth2 tokens
+        // ticket = ST-02071158-4h0CAwVTCgb2c03FdrDw-cas
+        // oauth1 = self.get_oauth1_token(ticket);
+        // oauth2 = self.exchange(oauth1);
     }
 
     fn api_request(&mut self, endpoint: &str) -> () {
         // use for actual application data downloads
 
         // TODO: give filename for saving json data
+        let ub = self.build_api_url(endpoint);
 
+        let response = self.client.get(ub.build()).send();
+
+        match response {
+            Ok(resp) => {
+                debug!("Got api response: {}", resp.text().unwrap());
+            }, 
+            Err(e) => {
+                error!("Unable to send api request: {:?}", e);
+            }
+        }
     }
 
     fn get_session(&mut self, domain: &str, username: &str, password: &str) -> () {
