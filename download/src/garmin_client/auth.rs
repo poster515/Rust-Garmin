@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-
+use log::debug;
 use chrono::{DateTime, Local};
 
 use reqwest;
@@ -93,7 +93,11 @@ impl GarminOAuth1Session {
         let mut endpoint_reqtoken: String = String::from("https://connectapi.garmin.com/oauth-service/oauth/preauthorized");
         endpoint_reqtoken.push_str("?ticket=");
         endpoint_reqtoken.push_str(ticket);
-        endpoint_reqtoken.push_str("?login-url=https://sso.garmin.com/sso/embed&accepts-mfa-tokens=true");
+        endpoint_reqtoken.push_str("&login-url=https://sso.garmin.com/sso/embed&accepts-mfa-tokens=true");
+
+        debug!("====================================================");
+        debug!("OAuth1.0 endpoint: {}", &endpoint_reqtoken);
+        debug!("====================================================");
 
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "com.garmin.android.apps.connectmobile".parse().unwrap());
@@ -106,7 +110,7 @@ impl GarminOAuth1Session {
                 .oauth1(secrets)
                 .post(&endpoint_reqtoken)
                 .headers(headers)
-                .query(&[("oauth_callback", "oob")])
+                // .query(&[("oauth_callback", "oob")])
                 .send()
                 .parse_oauth_token();
             response
