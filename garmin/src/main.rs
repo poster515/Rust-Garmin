@@ -3,11 +3,9 @@ use log::{error, info};
 use anyhow::Error;
 
 use config::{Config, File, FileFormat};
-// use float_cmp::ApproxEqUlps;
 
-use download::{DownloadManager, DownloadTraits};
+use download::DownloadManager;
 
-#[allow(unused_must_use)]
 fn main() -> Result<(), Error> {
     // takes various command line args, runs download once and exits
 
@@ -33,8 +31,8 @@ fn main() -> Result<(), Error> {
         Ok(config) => {
             info!("Successfully loaded garmin config!");
 
-            let mut _download_manager = DownloadManager::new(config);
-            _download_manager.login();
+            let mut download_manager = DownloadManager::new(config);
+            download_manager.login();
             // _download_manager.get_profile_name();
             // _download_manager.get_activity_types();
 

@@ -37,15 +37,6 @@ pub struct DownloadManager {
     profile_name: String
 }
 
-pub trait DownloadTraits {
-    fn login(&mut self) -> ();
-    fn get_activity_types(&mut self) -> ();
-    fn get_activities(&mut self) -> ();
-    fn get_sleep(&mut self) -> ();
-    // fn get_resting_heart_rate(&mut self) -> Result<bool, DownloadError>;
-    // fn save_to_json_file(&mut self) -> Result<bool, DownloadError>;
-}
-
 #[allow(dead_code)]
 impl DownloadManager {
     pub fn new(config: Config) -> DownloadManager {
@@ -78,10 +69,8 @@ impl DownloadManager {
     pub fn get_profile_name(&mut self){
         self.garmin_client.api_request(&self.garmin_user_profile_url);
     }
-}
 
-impl DownloadTraits for DownloadManager {
-    fn login(&mut self) {
+    pub fn login(&mut self) {
         // connect to domain using login url
         let username: &str = &self.garmin_config.credentials.user;
         let password: &str = &self.garmin_config.credentials.password;
@@ -96,7 +85,7 @@ impl DownloadTraits for DownloadManager {
         self.garmin_client.api_request(&personal_info_endpoint);
     }
 
-    fn get_activity_types(&mut self) {
+    pub fn get_activity_types(&mut self) {
 
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str("/activityTypes");
@@ -104,11 +93,11 @@ impl DownloadTraits for DownloadManager {
         self.garmin_client.api_request(&endpoint);
     }
 
-    fn get_activities(&mut self) {
+    pub fn get_activities(&mut self) {
 
     }
 
-    fn get_sleep(&mut self) {
+    pub fn get_sleep(&mut self) {
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str("/activityTypes");
 

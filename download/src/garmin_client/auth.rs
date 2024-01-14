@@ -2,8 +2,6 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::executor;
-use log::{error, debug, warn};
 use chrono::{DateTime, Local};
 
 use reqwest;
@@ -21,6 +19,7 @@ struct ConsumerInfo {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct OAuth1Token {
     oauth_token: String,
     oauth_token_secret: String,
@@ -30,6 +29,7 @@ pub struct OAuth1Token {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct OAuth2Token {
     scope: String,
     jti: String,
@@ -42,6 +42,7 @@ pub struct OAuth2Token {
     refresh_token_expires_at: u64
 }
 
+#[allow(dead_code)]
 impl OAuth2Token {
     fn expired(&self) -> bool {
         return self.expires_at < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
@@ -56,10 +57,11 @@ impl OAuth2Token {
     }
 }
 
+#[allow(dead_code)]
 pub struct GarminOAuth1Session {
-    OAUTH_CONSUMER_URL: String,
-    OAUTH_CONSUMER: HashMap<String, String>,
-    USER_AGENT: Vec<String>,
+    oauth_consumer_url: String,
+    oauth_consumer: HashMap<String, String>,
+    user_agent: Vec<String>,
     consumer_info: ConsumerInfo,
     oauth1_token: OAuth1Token,
     oauth1_client: reqwest::Client
@@ -68,17 +70,17 @@ pub struct GarminOAuth1Session {
 impl GarminOAuth1Session {
     pub fn new () -> GarminOAuth1Session {
         GarminOAuth1Session {
-            OAUTH_CONSUMER_URL: String::from("https://thegarth.s3.amazonaws.com/oauth_consumer.json"),
-            OAUTH_CONSUMER: HashMap::new(),
-            USER_AGENT: vec!["User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned()],
+            oauth_consumer_url: String::from("https://thegarth.s3.amazonaws.com/oauth_consumer.json"),
+            oauth_consumer: HashMap::new(),
+            user_agent: vec!["User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned()],
             consumer_info: Default::default(),
             oauth1_token: Default::default(),
             oauth1_client: reqwest::Client::new()
         }
     }
 
-    pub fn get_oauth1_token(&mut self, ticket: &str) -> String {
-        self.consumer_info = reqwest::blocking::get(&self.OAUTH_CONSUMER_URL)
+    pub fn get_oauth1_token(&mut self, ticket: &str) -> Result<String, reqwest_oauth1::Error> {
+        self.consumer_info = reqwest::blocking::get(&self.oauth_consumer_url)
             .unwrap()
             .json::<ConsumerInfo>()
             .unwrap();
@@ -95,28 +97,33 @@ impl GarminOAuth1Session {
 
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "com.garmin.android.apps.connectmobile".parse().unwrap());
-        
-        let client = reqwest::Client::new();
-        let response = client
-            .oauth1(secrets)
-            .post(&endpoint_reqtoken)
-            .headers(headers)
-            .query(&[("oauth_callback", "oob")])
-            .send()
-            .parse_oauth_token();
 
-        let resp = executor::block_on(response).unwrap();
+        let client = reqwest::Client::new();
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let future = rt.block_on({
+            let response = client
+                .oauth1(secrets)
+                .post(&endpoint_reqtoken)
+                .headers(headers)
+                .query(&[("oauth_callback", "oob")])
+                .send()
+                .parse_oauth_token();
+            response
+        });
+
+        let token: TokenResponse = future.unwrap();
 
         println!(
             "your token and secret is: \n token: {}\n secret: {}",
-            resp.oauth_token, resp.oauth_token_secret
+            token.oauth_token, token.oauth_token_secret
         );
 
         // let response_html = response.text().unwrap();
 
         // debug!("Got the following oauth response: {}", response_html);
 
-        resp.oauth_token
+        Ok(token.oauth_token)
 
         // TODO: get adapters/proxies/vverify fields from original reqwest client
         /*

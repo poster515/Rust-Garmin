@@ -1,6 +1,6 @@
 
 use std::collections::HashMap;
-
+use tokio::runtime::Runtime;
 use log::{error, debug, warn, info};
 use regex::Regex;
 use reqwest::blocking::Client;
@@ -14,6 +14,7 @@ pub trait ClientTraits {
 }
 
 // struct that knows how to navigate the auth flow for garmin connect api.
+#[allow(dead_code)]
 pub struct GarminClient {
     client: Client,
     auth_host: String,
@@ -21,7 +22,8 @@ pub struct GarminClient {
     last_sso_resp_text: String,
     last_api_resp_url: String,
     last_api_resp_text: String,
-    user_agent: HashMap<String, String>
+    user_agent: HashMap<String, String>,
+    runtime: Runtime
 }
 
 impl GarminClient {
@@ -35,7 +37,8 @@ impl GarminClient {
             last_sso_resp_text: String::new(),
             last_api_resp_url: String::new(),
             last_api_resp_text: String::new(),
-            user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())])
+            user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())]),
+            runtime: Runtime::new().unwrap()
         }
     }
 
@@ -191,18 +194,7 @@ impl GarminClient {
         String::new()
     }
 
-    fn get_oauth1_token(&self, ticket: &str) -> bool {
-        let mut oauth1_session = auth::GarminOAuth1Session::new();
-        let oauth1_token: String = oauth1_session.get_oauth1_token(ticket);
-        info!("Got oauth1 token: {}", oauth1_token);
-        true
-    }
-
-}
-
-#[allow(unused_variables)]
-impl ClientTraits for GarminClient {
-    fn login(&mut self, username: &str, password: &str) -> () {
+    pub fn login(&mut self, username: &str, password: &str) -> () {
 
         // set cookies
         if !self.set_cookie() {
@@ -214,7 +206,7 @@ impl ClientTraits for GarminClient {
             return
         }
         
-        let csrf_token = self.parse_csrf_token(&self.last_sso_resp_text);
+        let csrf_token: String = self.parse_csrf_token(&self.last_sso_resp_text);
         
         if csrf_token.len() == 0 {
             return
@@ -233,14 +225,23 @@ impl ClientTraits for GarminClient {
         }
 
         // TODO: set oauth1 and oauth2 tokens
-        let oauth1 = self.get_oauth1_token(&ticket);
+        let _oauth1 = self.get_oauth1_token(&ticket);
         // oauth2 = exchange(oauth1);
     }
 
-    fn api_request(&mut self, endpoint: &str) -> () {
+    fn get_oauth1_token(&self, ticket: &str) -> bool {
+        let mut oauth1_session = auth::GarminOAuth1Session::new();
+        let oauth1_token: String = oauth1_session.get_oauth1_token(ticket).unwrap();
+
+        info!("Got oauth1 token: {}", oauth1_token);
+        true
+    }
+
+    pub fn api_request(&mut self, endpoint: &str) -> () {
         // use for actual application data downloads
 
         // TODO: give filename for saving json data
+        // TODO: add oauth to this (won't work otherwise)
         let ub = self.build_api_url(endpoint);
 
         let response = self.client.get(ub.build()).send();
