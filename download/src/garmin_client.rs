@@ -1,6 +1,5 @@
 
 use std::collections::HashMap;
-use tokio::runtime::Runtime;
 use log::{error, debug, warn, info};
 use regex::Regex;
 use reqwest::blocking::Client;
@@ -23,7 +22,7 @@ pub struct GarminClient {
     last_api_resp_url: String,
     last_api_resp_text: String,
     user_agent: HashMap<String, String>,
-    runtime: Runtime
+    oauth1_session: auth::GarminOAuth1Session
 }
 
 impl GarminClient {
@@ -38,7 +37,7 @@ impl GarminClient {
             last_api_resp_url: String::new(),
             last_api_resp_text: String::new(),
             user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())]),
-            runtime: Runtime::new().unwrap()
+            oauth1_session: auth::GarminOAuth1Session::new()
         }
     }
 
@@ -224,16 +223,19 @@ impl GarminClient {
             return;
         }
 
-        // TODO: set oauth1 and oauth2 tokens
         let _oauth1 = self.get_oauth1_token(&ticket);
-        // oauth2 = exchange(oauth1);
+        let _oauth2 = self.get_oauth2_token();
     }
 
-    fn get_oauth1_token(&self, ticket: &str) -> bool {
-        let mut oauth1_session = auth::GarminOAuth1Session::new();
-        let oauth1_token: String = oauth1_session.get_oauth1_token(ticket).unwrap();
-
+    fn get_oauth1_token(&mut self, ticket: &str) -> bool {
+        let oauth1_token: String = self.oauth1_session.get_oauth1_token(ticket).unwrap();
         info!("Got oauth1 token: {}", oauth1_token);
+        true
+    }
+
+    fn get_oauth2_token(&mut self) -> bool {
+        let oauth2_token: bool = self.oauth1_session.get_oauth2_token().unwrap();
+        info!("Got oauth1 token: {}", oauth2_token);
         true
     }
 
