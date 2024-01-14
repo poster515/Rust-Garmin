@@ -1,9 +1,12 @@
 
 use std::collections::HashMap;
-use log::{error, debug, warn};
+
+use log::{error, debug, warn, info};
 use regex::Regex;
 use reqwest::blocking::Client;
 use reqwest::header::HeaderMap;
+
+mod auth;
 
 pub trait ClientTraits {
     fn login(&mut self, username: &str, password: &str) -> ();
@@ -188,6 +191,13 @@ impl GarminClient {
         String::new()
     }
 
+    fn get_oauth1_token(&self, ticket: &str) -> bool {
+        let mut oauth1_session = auth::GarminOAuth1Session::new();
+        let oauth1_token: String = oauth1_session.get_oauth1_token(ticket);
+        info!("Got oauth1 token: {}", oauth1_token);
+        true
+    }
+
 }
 
 #[allow(unused_variables)]
@@ -223,7 +233,8 @@ impl ClientTraits for GarminClient {
         }
 
         // TODO: set oauth1 and oauth2 tokens
-        // TODO: do we even need oauth tokens?
+        let oauth1 = self.get_oauth1_token(&ticket);
+        // oauth2 = exchange(oauth1);
     }
 
     fn api_request(&mut self, endpoint: &str) -> () {
