@@ -22,7 +22,7 @@ pub struct GarminClient {
     last_api_resp_url: String,
     last_api_resp_text: String,
     user_agent: HashMap<String, String>,
-    oauth1_session: auth::GarminOAuth1Session
+    oauth_manager: auth::GaminOAuthManager
 }
 
 impl GarminClient {
@@ -37,7 +37,7 @@ impl GarminClient {
             last_api_resp_url: String::new(),
             last_api_resp_text: String::new(),
             user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())]),
-            oauth1_session: auth::GarminOAuth1Session::new()
+            oauth_manager: auth::GaminOAuthManager::new()
         }
     }
 
@@ -228,13 +228,13 @@ impl GarminClient {
     }
 
     fn get_oauth1_token(&mut self, ticket: &str) -> bool {
-        let oauth1_token: String = self.oauth1_session.get_oauth1_token(ticket).unwrap();
+        let oauth1_token: String = self.oauth_manager.set_oauth1_token(ticket).unwrap();
         info!("Got oauth1 token: {}", oauth1_token);
         true
     }
 
     fn get_oauth2_token(&mut self) -> bool {
-        let oauth2_token: bool = self.oauth1_session.get_oauth2_token().unwrap();
+        let oauth2_token: bool = self.oauth_manager.set_oauth2_token().unwrap();
         info!("Got oauth1 token: {}", oauth2_token);
         true
     }
@@ -243,10 +243,18 @@ impl GarminClient {
         // use for actual application data downloads
 
         // TODO: give filename for saving json data
-        // TODO: add oauth to this (won't work otherwise)
-        let ub = self.build_api_url(endpoint);
+        let url = self.build_api_url(endpoint).build();
 
-        let response = self.client.get(ub.build()).send();
+        debug!("====================================================");
+        debug!("ConnectAPI requesting from: {}", &url);
+        debug!("====================================================");
+
+        let access_token: String = String::from(&self.oauth_manager.get_oauth2_token().oauth2_token.access_token);
+
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", access_token.as_str().parse().unwrap());
+
+        let response = self.client.get(url).headers(headers).send();
 
         match response {
             Ok(resp) => {

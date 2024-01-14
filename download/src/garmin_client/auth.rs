@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use log::{error, debug};
+use log::{error, debug, info};
 use chrono::{DateTime, Local};
 
 use reqwest;
@@ -34,22 +34,32 @@ pub struct OAuth1Token {
     domain: String
 }
 
-#[derive(Default)]
+#[derive(Default, Deserialize)]
 #[allow(dead_code)]
 pub struct OAuth2Token {
     scope: String,
     jti: String,
+    pub access_token: String,
     token_type: String,
-    access_token: String,
     refresh_token: String,
     expires_in: u64,
+    refresh_token_expires_in: u64
+}
+#[derive(Default)]
+pub struct OAuth2TokenWrapper {
+    pub oauth2_token: OAuth2Token,
     expires_at: u64,
-    refresh_token_expires_in: u64,
     refresh_token_expires_at: u64
 }
 
 #[allow(dead_code)]
-impl OAuth2Token {
+impl OAuth2TokenWrapper {
+    fn update(&mut self) {
+        // update our expirations based on current values
+        let now_secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        self.expires_at = now_secs + self.oauth2_token.expires_in;
+        self.refresh_token_expires_at = now_secs + self.oauth2_token.refresh_token_expires_in;
+    }
     fn expired(&self) -> bool {
         return self.expires_at < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     }
@@ -59,35 +69,41 @@ impl OAuth2Token {
     }
 
     fn to_string(&self) -> String {
-        format!("{} {}", self.token_type, self.access_token)
+        format!("{} {}", self.oauth2_token.token_type, self.oauth2_token.access_token)
     }
 }
 
 #[allow(dead_code)]
-pub struct GarminOAuth1Session {
+pub struct GaminOAuthManager {
     oauth_consumer_url: String,
     oauth_consumer: HashMap<String, String>,
     user_agent: Vec<String>,
     consumer_info: ConsumerInfo,
     token_info: TokenInfo,
     oauth1_token: OAuth1Token,
+    pub oauth2_token: OAuth2TokenWrapper,
     oauth1_client: reqwest::Client
 }
 
-impl GarminOAuth1Session {
-    pub fn new () -> GarminOAuth1Session {
-        GarminOAuth1Session {
+impl GaminOAuthManager {
+    pub fn new () -> GaminOAuthManager {
+        GaminOAuthManager {
             oauth_consumer_url: String::from("https://thegarth.s3.amazonaws.com/oauth_consumer.json"),
             oauth_consumer: HashMap::new(),
             user_agent: vec!["User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned()],
             consumer_info: Default::default(),
             token_info: Default::default(),
             oauth1_token: Default::default(),
+            oauth2_token: Default::default(),
             oauth1_client: reqwest::Client::new()
         }
     }
 
-    pub fn get_oauth1_token(&mut self, ticket: &str) -> Result<String, reqwest_oauth1::Error> {
+    pub fn get_oauth1_token(&self) -> &OAuth1Token {
+        &self.oauth1_token
+    }
+
+    pub fn set_oauth1_token(&mut self, ticket: &str) -> Result<String, reqwest_oauth1::Error> {
         self.consumer_info = reqwest::blocking::get(&self.oauth_consumer_url)
             .unwrap()
             .json::<ConsumerInfo>()
@@ -123,8 +139,6 @@ impl GarminOAuth1Session {
             response
         });
 
-        // TODO: parse_qs() the body of the response
-
         let token: TokenResponse = future.unwrap();
         self.token_info.token_key = String::from(&token.oauth_token);
         self.token_info.token_secret = String::from(&token.oauth_token_secret);
@@ -134,7 +148,11 @@ impl GarminOAuth1Session {
         Ok(token.oauth_token)
     }
 
-    pub fn get_oauth2_token(&mut self) -> Result<bool, reqwest_oauth1::Error> {
+    pub fn get_oauth2_token(&self) -> &OAuth2TokenWrapper {
+        &self.oauth2_token
+    }
+
+    pub fn set_oauth2_token(&mut self) -> Result<bool, reqwest_oauth1::Error> {
 
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "com.garmin.android.apps.connectmobile".parse().unwrap());
@@ -160,7 +178,12 @@ impl GarminOAuth1Session {
             Ok(resp) => {
                 let text_future = rt.block_on(resp.text());
                 match text_future {
-                    Ok(s) => {debug!("Got oauth2.0 response body: {}", s);}
+                    Ok(s) => {
+                        debug!("Got oauth2.0 response body: {}", s);
+                        self.oauth2_token.oauth2_token = serde_json::from_str(&s).unwrap();
+                        self.oauth2_token.update();
+                        info!("OAuth2.0 refresh expires in {} secs", self.oauth2_token.oauth2_token.expires_in);
+                    }
                     Err(e) => {error!("Expected to get response body. Error: {:?}", e); }
                 }
             },

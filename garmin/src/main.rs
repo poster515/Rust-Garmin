@@ -33,8 +33,8 @@ fn main() -> Result<(), Error> {
 
             let mut download_manager = DownloadManager::new(config);
             download_manager.login();
-            // _download_manager.get_profile_name();
-            // _download_manager.get_activity_types();
+            // download_manager.get_activity_types();
+            download_manager.get_profile_name();
 
         },
         Err(error) => {
