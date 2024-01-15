@@ -73,6 +73,25 @@ impl DownloadManager {
         }
     }
 
+    pub fn download(&mut self) {
+        if self.garmin_config.enabled_stats.activities {
+            let num_activities = self.garmin_config.data.num_activities_to_download.parse::<u32>().unwrap();
+            self.get_activity_summaries(num_activities);
+        }
+        if self.garmin_config.enabled_stats.sleep {
+            self.get_sleep();
+        }
+        if self.garmin_config.enabled_stats.rhr {
+            self.get_resting_heart_rate();
+        }
+        if self.garmin_config.enabled_stats.weight {
+            self.get_weight();
+        }
+        if self.garmin_config.enabled_stats.daily_summary {
+            self.get_summary_day();
+        }        
+    }
+
     pub fn get_user_profile(&mut self){
         // response will contain displayName and fullName
         self.garmin_client.api_request(&self.garmin_user_profile_url, None);
@@ -102,6 +121,13 @@ impl DownloadManager {
             self.get_user_profile();
         }
         return String::from(&self.full_name);
+    }
+
+    fn get_download_date(&self, default_date: &str) -> String{
+        if self.garmin_config.data.download_today_data {
+            return format!("{}", Local::now().format("%Y-%m-%d"));
+        }
+        String::from(default_date)
     }
 
     pub fn login(&mut self) {
@@ -134,12 +160,15 @@ impl DownloadManager {
     }
 
     pub fn get_activity_types(&mut self) {
+        // retrieves all possible activity types from Garmin. Included activityTypeIds for each.
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str("/activityTypes");
         self.garmin_client.api_request(&endpoint, None);
     }
 
-    pub fn get_activities(&mut self, activity_count: u32) {
+    pub fn get_activity_summaries(&mut self, activity_count: u32) {
+        // get high level activity summary, each entry contains activity ID that
+        // can be used to get more specific info
         let endpoint: String = String::from(&self.garmin_connect_activity_search_url);
         let count = format!("{}", activity_count);
         let params = HashMap::from([
@@ -147,10 +176,31 @@ impl DownloadManager {
             ("limit", &count),
         ]);
         self.garmin_client.api_request(&endpoint, Some(params));
+
+        // let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
+
+        // TODO: check for dates since midnight if 'download_today_data' is true, and download those
+    }
+
+    pub fn get_activity_info(&mut self, activity_id: u64) {
+        // Given specific activity ID, retrieves all info
+        let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
+        endpoint.push_str(&format!("/{}", activity_id));
+        self.garmin_client.api_request(&endpoint, None);
+    }
+
+    pub fn monitoring(&mut self) {
+        // url = f'{self.garmin_connect_download_service_url}/wellness/{date.strftime("%Y-%m-%d")}'
+        let date_str = self.get_download_date(&self.garmin_config.data.monitoring_start_date);
+        let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
+        endpoint.push_str("/wellness/");
+        endpoint.push_str(&date_str);
+
+        self.garmin_client.api_request(&endpoint, None);
     }
 
     pub fn get_sleep(&mut self) {
-        let date_str = &self.garmin_config.data.sleep_start_date;
+        let date_str = self.get_download_date(&self.garmin_config.data.sleep_start_date);
         let mut endpoint: String = String::from(&self.garmin_connect_sleep_daily_url);
         endpoint.push_str(&format!("/{}", &self.display_name));
 
@@ -163,7 +213,7 @@ impl DownloadManager {
     }
 
     pub fn get_resting_heart_rate(&mut self) {
-        let date_str = &self.garmin_config.data.rhr_start_date;
+        let date_str = self.get_download_date(&self.garmin_config.data.rhr_start_date);
         let mut endpoint = String::from(&self.garmin_connect_rhr);
         endpoint.push_str(&format!("/{}", &self.display_name));
 
@@ -177,8 +227,8 @@ impl DownloadManager {
     }
 
     pub fn get_weight(&mut self) {
-        let date_str = &self.garmin_config.data.weight_start_date;
-        match self.get_date_in_epoch_ms(date_str) {
+        let date_str = self.get_download_date(&self.garmin_config.data.weight_start_date);
+        match self.get_date_in_epoch_ms(&date_str) {
             Ok(epoch_millis) => {
                 let endpoint = String::from(&self.garmin_connect_weight_url);
                 let params = HashMap::from([
@@ -193,8 +243,7 @@ impl DownloadManager {
     }
 
     pub fn get_summary_day(&mut self) {
-        let datetime = Local::now();
-        let date_str = format!("{}", datetime.format("%Y-%m-%d"));
+        let date_str = self.get_download_date(&self.garmin_config.data.summary_date);
 
         match self.get_date_in_epoch_ms(&date_str) {
             Ok(epoch_millis) => {

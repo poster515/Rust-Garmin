@@ -15,19 +15,20 @@ pub struct Credentials {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct DataConfig {
+    pub summary_date: String,
     pub weight_start_date: String,
     pub sleep_start_date: String,
     pub rhr_start_date: String,
     pub monitoring_start_date: String,
+    pub download_today_data: bool,
     pub num_activities_to_download: String,
     pub download_all_activities: String
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct EnabledStats {
+    pub daily_summary: bool,
     pub monitoring: bool,
-    pub steps: bool,
-    pub itime: bool,
     pub sleep: bool,
     pub rhr: bool,
     pub weight: bool,
