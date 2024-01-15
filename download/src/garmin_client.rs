@@ -247,12 +247,18 @@ impl GarminClient {
     }
 
     fn set_oauth2_token(&mut self) -> bool {
-        let oauth2_token: String = self.oauth_manager.set_oauth2_token(self.client.clone()).unwrap();
-        info!("Got oauth2 token: {}", oauth2_token);
-        true
+        match self.oauth_manager.set_oauth2_token(self.client.clone()) {
+            Ok(token) => {
+                info!("Got oauth2 token: {}", token);
+                true
+            }, Err(e) => {
+                error!("Unable to obtain oauth2_token: {}", e);
+                false
+            }
+        }
     }
 
-    pub fn api_request(&mut self, endpoint: &str) -> () {
+    pub fn api_request(&mut self, endpoint: &str, params: Option<HashMap<&str, &str>>) -> bool {
         // use for actual application data downloads
 
         // TODO: give filename for saving json data
@@ -276,17 +282,43 @@ impl GarminClient {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let future = rt.block_on({
-            self.client.get(url).headers(headers).send()
+            let builder = self.client.get(url).headers(headers);
+
+            match params {
+                Some(param_map) => {
+                    builder.query(&param_map).send()
+                },
+                None => {
+                    builder.send()
+                }
+            }
         });
 
-        let response = future.unwrap();
-        self.last_api_resp_url = response.url().to_string();
+        match future {
+            Ok(response) => {
+                self.last_api_resp_url = response.url().to_string();
+                let get_body_future = rt.block_on({
+                    response.text()
+                });
 
-        let get_body_future = rt.block_on({
-            response.text()
-        });
+                match get_body_future {
+                    Ok(body) => {
+                        self.last_api_resp_text = body;
+                        debug!("Got api response: {}", &self.last_api_resp_text);
+                        true
+                    }, Err(e) => {
+                        error!("Error parsing response body: {:?}", e);
+                        false
+                    }
+                }
+            }, Err(e) => {
+                error!("Error on api call: {:?}", e);
+                false
+            }
+        }
+    }
 
-        self.last_api_resp_text = get_body_future.unwrap();
-        debug!("Got api response: {}", &self.last_api_resp_text);
+    pub fn get_last_resp_text(&self) -> &str {
+        &self.last_api_resp_text
     }
 }
