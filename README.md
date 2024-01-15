@@ -1,5 +1,5 @@
 ## GarminGearBox
-![Rust Build]([https://github.com/poster515/Rust-Garmin/actions/workflows/rust.yml/badge.svg?branch=main)
+![Rust Build](https://github.com/poster515/Rust-Garmin/actions/workflows/rust.yml/badge.svg?branch=main)
 This repo contains a complete OAuth2.0 client capable of obtaining various garmin data from specified user account. Main files include:
 
 ### log4rs.yml
