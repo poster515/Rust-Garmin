@@ -272,7 +272,7 @@ impl GarminClient {
         debug!("====================================================");
 
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", access_token.as_str().parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", access_token).parse().unwrap());
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let future = rt.block_on({
