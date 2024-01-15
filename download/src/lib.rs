@@ -177,7 +177,30 @@ impl DownloadManager {
         ]);
         self.garmin_client.api_request(&endpoint, Some(params));
 
-        // let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
+        let lookup: Vec<serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
+
+        for activity in lookup {
+            let id = &activity["activityId"];
+            let name = &activity["activityName"].to_string().replace('"', "");
+
+            info!("Getting summary for activity {}: {}, on {}", &id, &name, &activity["startTimeLocal"]);
+
+            let activity_string = &activity["startTimeLocal"].to_string().replace('"', "");
+            let midnight_string = format!("{}", Local::now().format("%Y-%m-%d 00:00:00"));
+            
+            let activity = NaiveDateTime::parse_from_str(activity_string, "%Y-%m-%d %H:%M:%S").unwrap();
+            let midnight = NaiveDateTime::parse_from_str(&midnight_string, "%Y-%m-%d %H:%M:%S").unwrap();
+
+            if self.garmin_config.data.download_today_data {
+                if activity.timestamp_nanos_opt() > midnight.timestamp_nanos_opt() {
+                    self.get_activity_info(id.to_string().parse::<u64>().unwrap());
+                } else {
+                    info!("Ignoring activity '{}' from: {}", &name, activity_string);
+                    return;
+                }
+            }
+            self.get_activity_info(id.to_string().parse::<u64>().unwrap());
+        }
 
         // TODO: check for dates since midnight if 'download_today_data' is true, and download those
     }
