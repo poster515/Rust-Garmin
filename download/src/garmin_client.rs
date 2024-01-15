@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use log::{error, debug, warn, info};
 use regex::Regex;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use reqwest::header::HeaderMap;
 
 mod auth;
@@ -87,15 +87,20 @@ impl GarminClient {
         debug!("Requesting url: {}", url);
         debug!("====================================================");
 
-        let response = self.client.get(&url).send();
-        match response {
-            Ok(response) => {
-                self.last_sso_resp_url = response.url().to_string();
-                self.last_sso_resp_text = response.text().unwrap();
-                true
-            },
-            Err(_) => false
-        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let future = rt.block_on({
+            self.client.get(&url).send()
+        });
+
+        let response = future.unwrap();
+        self.last_sso_resp_url = response.url().to_string();
+
+        let get_body_future = rt.block_on({
+            response.text()
+        });
+
+        self.last_sso_resp_text = get_body_future.unwrap();
+        true
     }
 
     fn get_csrf_token(&mut self) -> bool {
@@ -103,17 +108,21 @@ impl GarminClient {
         let url = self.build_singin_url();
         let mut headers = HeaderMap::new();
         headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
-        
-        // get csrf token
-        let response = self.client.get(&url).headers(headers).send();
-        match response {
-            Ok(response) => {
-                self.last_sso_resp_url = response.url().to_string();
-                self.last_sso_resp_text = response.text().unwrap();
-                true
-            },
-            Err(_) => false
-        }
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let future = rt.block_on({
+            self.client.get(&url).headers(headers).send()
+        });
+
+        let response = future.unwrap();
+        self.last_sso_resp_url = response.url().to_string();
+
+        let get_body_future = rt.block_on({
+            response.text()
+        });
+
+        self.last_sso_resp_text = get_body_future.unwrap();
+        true
     }
 
     fn submit_login(&mut self, username: &str, password: &str, csrf_token: &str) -> bool {
@@ -127,20 +136,24 @@ impl GarminClient {
             ("embed", String::from("true")),
             ("_csrf", String::from(csrf_token))
         ]);
-        
-        let login_response = self.client.post(&url)
-            .headers(headers)
-            .form(&form)
-            .send();
 
-        match login_response {
-            Ok(response) => {
-                self.last_sso_resp_url = response.url().to_string();
-                self.last_sso_resp_text = response.text().unwrap();
-                true
-            },
-            Err(_) => false
-        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let future = rt.block_on({
+            self.client.post(&url)
+                .headers(headers)
+                .form(&form)
+                .send()
+        });
+
+        let response = future.unwrap();
+        self.last_sso_resp_url = response.url().to_string();
+
+        let get_body_future = rt.block_on({
+            response.text()
+        });
+
+        self.last_sso_resp_text = get_body_future.unwrap();
+        true
     }
 
     fn parse_csrf_token(&self, response_html: &String) -> String {
@@ -223,19 +236,19 @@ impl GarminClient {
             return;
         }
 
-        let _oauth1 = self.get_oauth1_token(&ticket);
-        let _oauth2 = self.get_oauth2_token();
+        let _oauth1 = self.set_oauth1_token(&ticket);
+        let _oauth2 = self.set_oauth2_token();
     }
 
-    fn get_oauth1_token(&mut self, ticket: &str) -> bool {
-        let oauth1_token: String = self.oauth_manager.set_oauth1_token(ticket).unwrap();
+    fn set_oauth1_token(&mut self, ticket: &str) -> bool {
+        let oauth1_token: String = self.oauth_manager.set_oauth1_token(ticket, self.client.clone()).unwrap();
         info!("Got oauth1 token: {}", oauth1_token);
         true
     }
 
-    fn get_oauth2_token(&mut self) -> bool {
-        let oauth2_token: bool = self.oauth_manager.set_oauth2_token().unwrap();
-        info!("Got oauth1 token: {}", oauth2_token);
+    fn set_oauth2_token(&mut self) -> bool {
+        let oauth2_token: String = self.oauth_manager.set_oauth2_token(self.client.clone()).unwrap();
+        info!("Got oauth2 token: {}", oauth2_token);
         true
     }
 
@@ -245,26 +258,35 @@ impl GarminClient {
         // TODO: give filename for saving json data
         let url = self.build_api_url(endpoint).build();
 
+        if self.oauth_manager.get_oauth2_token().is_expired() {
+            info!("====================================================");
+            info!("ConnectAPI refreshing OAuth2.0 token...");
+            info!("====================================================");
+            self.set_oauth2_token();
+        }
+
+        let access_token: String = String::from(&self.oauth_manager.get_oauth2_token().oauth2_token.access_token);
+
         debug!("====================================================");
         debug!("ConnectAPI requesting from: {}", &url);
         debug!("====================================================");
 
-        let access_token: String = String::from(&self.oauth_manager.get_oauth2_token().oauth2_token.access_token);
-
         let mut headers = HeaderMap::new();
         headers.insert("Authorization", access_token.as_str().parse().unwrap());
 
-        let response = self.client.get(url).headers(headers).send();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let future = rt.block_on({
+            self.client.get(url).headers(headers).send()
+        });
 
-        match response {
-            Ok(resp) => {
-                self.last_api_resp_url = resp.url().to_string();
-                self.last_api_resp_text = resp.text().unwrap();
-                debug!("Got api response: {}", &self.last_api_resp_text);
-            }, 
-            Err(e) => {
-                error!("Unable to send api request: {:?}", e);
-            }
-        }
+        let response = future.unwrap();
+        self.last_api_resp_url = response.url().to_string();
+
+        let get_body_future = rt.block_on({
+            response.text()
+        });
+
+        self.last_api_resp_text = get_body_future.unwrap();
+        debug!("Got api response: {}", &self.last_api_resp_text);
     }
 }

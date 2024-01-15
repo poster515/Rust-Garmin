@@ -1,16 +1,21 @@
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use log::{error, debug, info};
+use log::{debug, info, error};
 use chrono::{DateTime, Local};
 
 use reqwest;
 use reqwest::header::HeaderMap;
 
 use reqwest_oauth1;
-use reqwest_oauth1::{OAuthClientProvider, TokenReaderFuture, TokenResponse};
+use reqwest_oauth1::{OAuthClientProvider, TokenResponse, TokenReaderResult, TokenReaderError};
 
 use serde::Deserialize;
+
+use tokio;
+
+const OAUTH_TOKEN_KEY: &str = "oauth_token";
+const OAUTH_TOKEN_SECRET_KEY: &str = "oauth_token_secret";
 
 #[derive(Default, Deserialize)]
 struct ConsumerInfo {
@@ -27,15 +32,14 @@ struct TokenInfo {
 #[derive(Default)]
 #[allow(dead_code)]
 pub struct OAuth1Token {
-    oauth_token: String,
-    oauth_token_secret: String,
+    token_info: TokenInfo,
     mfa_token: String,
     mfa_expiration_timestamp: DateTime<Local>,
     domain: String
 }
 
 #[derive(Default, Deserialize)]
-#[allow(dead_code)]
+#[allow(dead_code)]     // need to deserialize message body into this struct
 pub struct OAuth2Token {
     scope: String,
     jti: String,
@@ -60,11 +64,11 @@ impl OAuth2TokenWrapper {
         self.expires_at = now_secs + self.oauth2_token.expires_in;
         self.refresh_token_expires_at = now_secs + self.oauth2_token.refresh_token_expires_in;
     }
-    fn expired(&self) -> bool {
+    pub fn is_expired(&self) -> bool {
         return self.expires_at < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     }
 
-    fn refresh_expired(&self) -> bool {
+    fn is_refresh_expired(&self) -> bool {
         return self.refresh_token_expires_at < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     }
 
@@ -73,37 +77,54 @@ impl OAuth2TokenWrapper {
     }
 }
 
-#[allow(dead_code)]
+// copied from the reqwest oauth1 crate because it's hidden behind private::sealed trait.
+fn read_oauth_token(text: String) -> TokenReaderResult<TokenResponse> {
+    let mut destructured = text
+        .split("&")
+        .map(|e| e.splitn(2, "="))
+        .map(|v| {
+            let mut iter = v.into_iter();
+            (
+                iter.next().unwrap_or_default().to_string(),
+                iter.next().unwrap_or_default().to_string(),
+            )
+        })
+        .collect::<HashMap<String, String>>();
+    let oauth_token = destructured.remove(OAUTH_TOKEN_KEY);
+    let oauth_token_secret = destructured.remove(OAUTH_TOKEN_SECRET_KEY);
+    match (oauth_token, oauth_token_secret) {
+        (Some(t), Some(s)) => Ok(TokenResponse {
+            oauth_token: t,
+            oauth_token_secret: s,
+            remain: destructured,
+        }),
+        (None, _) => Err(TokenReaderError::TokenKeyNotFound(OAUTH_TOKEN_KEY, text)),
+        (_, _) => Err(TokenReaderError::TokenKeyNotFound(
+            OAUTH_TOKEN_SECRET_KEY,
+            text,
+        )),
+    }
+}
+
+
 pub struct GaminOAuthManager {
     oauth_consumer_url: String,
-    oauth_consumer: HashMap<String, String>,
-    user_agent: Vec<String>,
     consumer_info: ConsumerInfo,
-    token_info: TokenInfo,
     oauth1_token: OAuth1Token,
-    pub oauth2_token: OAuth2TokenWrapper,
-    oauth1_client: reqwest::Client
+    pub oauth2_token: OAuth2TokenWrapper
 }
 
 impl GaminOAuthManager {
     pub fn new () -> GaminOAuthManager {
         GaminOAuthManager {
             oauth_consumer_url: String::from("https://thegarth.s3.amazonaws.com/oauth_consumer.json"),
-            oauth_consumer: HashMap::new(),
-            user_agent: vec!["User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned()],
             consumer_info: Default::default(),
-            token_info: Default::default(),
             oauth1_token: Default::default(),
-            oauth2_token: Default::default(),
-            oauth1_client: reqwest::Client::new()
+            oauth2_token: Default::default()
         }
     }
 
-    pub fn get_oauth1_token(&self) -> &OAuth1Token {
-        &self.oauth1_token
-    }
-
-    pub fn set_oauth1_token(&mut self, ticket: &str) -> Result<String, reqwest_oauth1::Error> {
+    pub fn set_oauth1_token(&mut self, ticket: &str, client: reqwest::Client) -> Result<String, reqwest_oauth1::Error> {
         self.consumer_info = reqwest::blocking::get(&self.oauth_consumer_url)
             .unwrap()
             .json::<ConsumerInfo>()
@@ -126,24 +147,33 @@ impl GaminOAuthManager {
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "com.garmin.android.apps.connectmobile".parse().unwrap());
 
-        let client = reqwest::Client::new();
-
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let future = rt.block_on({
-            let response = client
+        let oauth_future = rt.block_on({
+            client
                 .oauth1(secrets)
                 .post(&endpoint_reqtoken)
                 .headers(headers)
                 .send()
-                .parse_oauth_token();
-            response
         });
 
-        let token: TokenResponse = future.unwrap();
-        self.token_info.token_key = String::from(&token.oauth_token);
-        self.token_info.token_secret = String::from(&token.oauth_token_secret);
+        let get_body_future = rt.block_on({
+            let response_body: reqwest::Response = oauth_future.unwrap();
+            response_body.text()
+        });
 
-        println!("your token and secret is: \n token: {}\n secret: {}", token.oauth_token, token.oauth_token_secret);
+        let body_text = get_body_future.unwrap();
+
+        debug!("====================================================");
+        debug!("OAuth1.0 response body: {}", &body_text);
+        debug!("====================================================");
+
+        let token: TokenResponse = read_oauth_token(body_text).unwrap();
+        self.oauth1_token.token_info.token_key = String::from(&token.oauth_token);
+        self.oauth1_token.token_info.token_secret = String::from(&token.oauth_token_secret);
+
+        info!("====================================================");
+        info!("OAuth1.0 token and secret is: \n token: {}\n secret: {}", token.oauth_token, token.oauth_token_secret);
+        info!("====================================================");
 
         Ok(token.oauth_token)
     }
@@ -152,7 +182,7 @@ impl GaminOAuthManager {
         &self.oauth2_token
     }
 
-    pub fn set_oauth2_token(&mut self) -> Result<bool, reqwest_oauth1::Error> {
+    pub fn set_oauth2_token(&mut self, client: reqwest::Client) -> Result<String, reqwest_oauth1::Error> {
 
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "com.garmin.android.apps.connectmobile".parse().unwrap());
@@ -162,13 +192,11 @@ impl GaminOAuthManager {
         // TODO: add timeout at some point
 
         let secrets = reqwest_oauth1::Secrets::new(String::from(&self.consumer_info.consumer_key), String::from(&self.consumer_info.consumer_secret))
-            .token(String::from(&self.token_info.token_key), String::from(&self.token_info.token_secret));
+            .token(String::from(&self.oauth1_token.token_info.token_key), String::from(&self.oauth1_token.token_info.token_secret));
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let client = reqwest::Client::new();
         let future = rt.block_on({
-            client
-                .oauth1(secrets)
+            client.oauth1(secrets)
                 .post("https://connectapi.garmin.com/oauth-service/oauth/exchange/user/2.0")
                 .headers(headers)
                 .send()
@@ -189,7 +217,7 @@ impl GaminOAuthManager {
             },
             Err(e) => {error!("Unable to post oauth2.0 request. Error: {:?}", e); }
         }
-        Ok(true)
+        Ok(String::from(&self.oauth2_token.oauth2_token.access_token))
     }
 }
 

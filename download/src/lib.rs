@@ -104,9 +104,9 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint);
     }
 
-    // fn get_resting_heart_rate(&mut self) -> Result<bool, DownloadError>{
+    fn get_resting_heart_rate(&mut self) {
 
-    // }
+    }
     // fn save_to_json_file(&mut self) -> Result<bool, DownloadError>{
 
     // }
