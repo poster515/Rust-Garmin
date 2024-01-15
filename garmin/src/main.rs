@@ -40,6 +40,7 @@ fn main() -> Result<(), Error> {
             // download_manager.get_weight();
             download_manager.get_resting_heart_rate();
             download_manager.get_sleep();
+            download_manager.get_summary_day();
 
         },
         Err(error) => {

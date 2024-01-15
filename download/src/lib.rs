@@ -1,6 +1,6 @@
 
 use std::collections::HashMap;
-use chrono::{NaiveDateTime, ParseError};
+use chrono::{Local, NaiveDateTime, ParseError};
 use config::Config;
 use log::{debug, error, info};
 
@@ -189,6 +189,26 @@ impl DownloadManager {
                 self.garmin_client.api_request(&endpoint, Some(params));
             },
             Err(_) => {}
+        }
+    }
+
+    pub fn get_summary_day(&mut self) {
+        let datetime = Local::now();
+        let date_str = format!("{}", datetime.format("%Y-%m-%d"));
+
+        match self.get_date_in_epoch_ms(&date_str) {
+            Ok(epoch_millis) => {
+
+                let mut endpoint = String::from(&self.garmin_connect_daily_summary_url);
+                endpoint.push_str(&format!("/{}", &self.display_name));
+
+                let params = HashMap::from([
+                    ("calendarDate", date_str.as_str()),
+                    ("_", epoch_millis.as_str())
+                ]);
+                self.garmin_client.api_request(&endpoint, Some(params));
+
+            }, Err(_) => {}
         }
     }
 
