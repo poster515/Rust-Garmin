@@ -1,5 +1,6 @@
 
 use std::collections::HashMap;
+use std::cmp::min;
 use log::{error, debug, warn, info};
 use regex::Regex;
 use reqwest::Client;
@@ -304,7 +305,7 @@ impl GarminClient {
                 match get_body_future {
                     Ok(body) => {
                         self.last_api_resp_text = body;
-                        debug!("Got api response: {}", &self.last_api_resp_text);
+                        debug!("Got api response: {}", &self.last_api_resp_text[0..min(1024, self.last_api_resp_text.len())]);
                         true
                     }, Err(e) => {
                         error!("Error parsing response body: {:?}", e);

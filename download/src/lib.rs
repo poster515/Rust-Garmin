@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use chrono::{Local, NaiveDateTime, ParseError};
 use config::Config;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -212,6 +212,7 @@ impl DownloadManager {
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str(&format!("/{}", activity_id));
         if !self.garmin_client.api_request(&endpoint, None){
+            warn!("Unable to get API data. Endpoint: {}, activityId: {}", endpoint, activity_id);
             return;
         }
         let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
@@ -234,7 +235,7 @@ impl DownloadManager {
     pub fn get_sleep(&mut self) {
         let date_str = self.get_download_date(&self.garmin_config.data.sleep_start_date);
         let mut endpoint: String = String::from(&self.garmin_connect_sleep_daily_url);
-        endpoint.push_str(&format!("/{}", &self.display_name));
+        endpoint.push_str(&format!("/{}", &self.get_display_name()));
 
         let params = HashMap::from([
             ("date", date_str.as_str()),
@@ -248,7 +249,7 @@ impl DownloadManager {
     pub fn get_resting_heart_rate(&mut self) {
         let date_str = self.get_download_date(&self.garmin_config.data.rhr_start_date);
         let mut endpoint = String::from(&self.garmin_connect_rhr);
-        endpoint.push_str(&format!("/{}", &self.display_name));
+        endpoint.push_str(&format!("/{}", &self.get_display_name()));
 
         let params = HashMap::from([
             ("fromDate", date_str.as_str()),
@@ -284,7 +285,7 @@ impl DownloadManager {
             Ok(epoch_millis) => {
 
                 let mut endpoint = String::from(&self.garmin_connect_daily_summary_url);
-                endpoint.push_str(&format!("/{}", &self.display_name));
+                endpoint.push_str(&format!("/{}", &self.get_display_name()));
 
                 let params = HashMap::from([
                     ("calendarDate", date_str.as_str()),
@@ -293,7 +294,9 @@ impl DownloadManager {
                 self.garmin_client.api_request(&endpoint, Some(params));
                 self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("day_summary"), None);
 
-            }, Err(_) => {}
+            }, Err(e) => {
+                warn!("Unable to properly parse date: {}. Error: {}", &date_str, e);
+            }
         }
     }
 
