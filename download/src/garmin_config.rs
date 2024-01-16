@@ -22,7 +22,10 @@ pub struct DataConfig {
     pub monitoring_start_date: String,
     pub download_today_data: bool,
     pub num_activities_to_download: String,
-    pub download_all_activities: String
+    pub download_all_activities: String,
+    pub file_base_path: String,
+    pub save_to_file: bool,
+    pub overwrite: bool
 }
 
 #[derive(Debug, Deserialize, Default)]

@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use chrono::{Local, NaiveDateTime, ParseError};
 use config::Config;
 use log::{debug, error, info};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 mod garmin_config;
 mod garmin_client;
@@ -164,6 +167,7 @@ impl DownloadManager {
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str("/activityTypes");
         self.garmin_client.api_request(&endpoint, None);
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("activity_types"), None);
     }
 
     pub fn get_activity_summaries(&mut self, activity_count: u32) {
@@ -201,15 +205,19 @@ impl DownloadManager {
             }
             self.get_activity_info(id.to_string().parse::<u64>().unwrap());
         }
-
-        // TODO: check for dates since midnight if 'download_today_data' is true, and download those
     }
 
     pub fn get_activity_info(&mut self, activity_id: u64) {
         // Given specific activity ID, retrieves all info
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str(&format!("/{}", activity_id));
-        self.garmin_client.api_request(&endpoint, None);
+        if !self.garmin_client.api_request(&endpoint, None){
+            return;
+        }
+        let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
+        let id = lookup["activityId"].to_string();
+        let name = lookup["activityName"].to_string();
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), name.to_string(), Some(vec![id]));
     }
 
     pub fn monitoring(&mut self) {
@@ -220,6 +228,7 @@ impl DownloadManager {
         endpoint.push_str(&date_str);
 
         self.garmin_client.api_request(&endpoint, None);
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("monitoring"), None);
     }
 
     pub fn get_sleep(&mut self) {
@@ -233,6 +242,7 @@ impl DownloadManager {
         ]);
 
         self.garmin_client.api_request(&endpoint, Some(params));
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("sleep"), None);
     }
 
     pub fn get_resting_heart_rate(&mut self) {
@@ -247,6 +257,7 @@ impl DownloadManager {
         ]);
 
         self.garmin_client.api_request(&endpoint, Some(params));
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("heartrate"), None);
     }
 
     pub fn get_weight(&mut self) {
@@ -260,6 +271,7 @@ impl DownloadManager {
                     ("_", &epoch_millis.as_str())
                 ]);
                 self.garmin_client.api_request(&endpoint, Some(params));
+                self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("weight"), None);
             },
             Err(_) => {}
         }
@@ -279,6 +291,7 @@ impl DownloadManager {
                     ("_", epoch_millis.as_str())
                 ]);
                 self.garmin_client.api_request(&endpoint, Some(params));
+                self.save_to_json_file(self.garmin_client.get_last_resp_text(), String::from("day_summary"), None);
 
             }, Err(_) => {}
         }
@@ -300,7 +313,61 @@ impl DownloadManager {
             }
         }
     }
-    // fn save_to_json_file(&mut self) -> Result<bool, DownloadError>{
+    fn save_to_json_file(&self, 
+            data: &str,
+            filename_root: String,
+            filename_extensions: Option<Vec<String>>) -> (){
 
-    // }
+        if !self.garmin_config.data.save_to_file {
+            info!("Save file config is disabled, ignoring");
+        }
+
+        let base_path = String::from(&self.garmin_config.data.file_base_path);
+
+        let mut filename: String = String::from(format!("{}_{}", Local::now().format("%Y-%m-%d"), filename_root.replace('"', "")));
+        
+        match filename_extensions {
+            Some(s) => {
+                for ext in s {
+                    filename.push_str("-");
+                    filename.push_str(&ext);
+                }
+            },
+            None => {}
+        }
+
+        filename.push_str(".json");
+
+        let path = Path::new(&base_path).join(&filename);
+        if path.exists() {
+            if !self.garmin_config.data.overwrite {
+                info!("File: {} exists, but overwrite is disabled, ignoring", path.display());
+            } else {
+                info!("File: {} exists, overwriting...", path.display());
+            }
+        } else {
+            info!("Saving file: {} to folder: {}", filename, base_path);
+        }
+
+        match File::create(path) {
+            Ok(file) => {
+                let mut writer = BufWriter::new(file);
+                let json_data: HashMap<String, serde_json::Value> = serde_json::from_str(data).unwrap();
+                match serde_json::to_writer_pretty(&mut writer, &json_data) {
+                    Ok(_) => {
+                        match writer.flush() {
+                            Ok(_) => {}, 
+                            Err(e) => {
+                                error!("Error flushing writer: {}", e);
+                            }
+                        }
+                    }, Err(e) => {
+                        error!("Error writing json to buffer: {}", e);
+                    }
+                }
+            }, Err(e) => {
+                error!("Error creating file: {}", e);
+            }
+        }
+    }
 }

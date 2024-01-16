@@ -13,16 +13,19 @@
         "sleep_start_date"              : "2019-12-31",
         "rhr_start_date"                : "2019-12-31",
         "monitoring_start_date"         : "2019-12-31",
-        "download_today_data"           : true,
-        "num_activities_to_download"    : 25,
-        "download_all_activities"       : 1000
+        "download_today_data"           : false,
+        "num_activities_to_download"    : 1,
+        "download_all_activities"       : 1000,
+        "file_base_path"                : "/home/jpost/Documents/garmin_data",
+        "save_to_file"                  : true,
+        "overwrite"                     : true
     },
     "enabled_stats": {
-        "daily_summary"                 : true,
-        "monitoring"                    : true,
-        "sleep"                         : true,
-        "rhr"                           : true,
-        "weight"                        : true,
+        "daily_summary"                 : false,
+        "monitoring"                    : false,
+        "sleep"                         : false,
+        "rhr"                           : false,
+        "weight"                        : false,
         "activities"                    : true
     }
 }
