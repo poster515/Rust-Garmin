@@ -1,0 +1,7 @@
+{
+    "url"               : "https://localhost:8086",
+    "database"          : "metrics",
+    "username"          : "joeschmoe",
+    "password"          : "greatpassword",
+    "file_base_path"    : "/home/jpost/Documents/garmin_data"
+}

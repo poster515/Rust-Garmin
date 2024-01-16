@@ -3,9 +3,9 @@
         "domain": "https://www.garmin.com"
     },
     "credentials": {
-        "user"                          : "joe@shmoe.com",
+        "user"                          : "dummy@test.com",
         "secure_password"               : false,
-        "password"                      : "yourpassword"
+        "password"                      : "dummy"
     },
     "data": {
         "summary_date"                  : "2023-12-31",

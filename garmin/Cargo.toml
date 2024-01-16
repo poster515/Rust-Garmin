@@ -13,3 +13,4 @@ serde_derive = "1.0.195"
 anyhow = "1.0.79"
 getopts = "0.2.21"
 download = { path = "../download" }
+upload = { path = "../upload" }

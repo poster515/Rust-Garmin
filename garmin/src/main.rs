@@ -7,6 +7,7 @@ use config::{Config, File, FileFormat};
 use getopts::{Options, Matches};
 
 use download::DownloadManager;
+use upload::UploadManager;
 
 fn build_options() -> Options {
     // the presence of any of these options automatically enables
@@ -15,31 +16,39 @@ fn build_options() -> Options {
     options.optopt("u",
         "summary_date",
         "download date for summary data",
-        "use YYY-MM-DD format",
-    );
+        "use YYY-MM-DD format");
+
     options.optopt("w",
         "weight_date",
         "download date for weight data",
-        "use YYY-MM-DD format",
-    );
+        "use YYY-MM-DD format");
+
     options.optopt("s",
         "sleep_date",
         "download date for sleep data",
-        "use YYY-MM-DD format",
-    );
+        "use YYY-MM-DD format");
+
     options.optopt("r",
         "resting_heart_date",
         "download date for resting heart rate data",
-        "use YYY-MM-DD format",
-    );
+        "use YYY-MM-DD format");
+
     options.optopt("m",
         "monitor_date",
         "download date for monitoring data",
-        "use YYY-MM-DD format",
-    );
+        "use YYY-MM-DD format");
+
     options.optflag("h", 
         "help", 
         "print this help menu");
+    
+    options.optflag("", 
+        "disable_download", 
+        "ignores data download entirely");
+    
+    options.optflag("", 
+        "disable_upload", 
+        "ignores data upload entirely");
 
     options
 }
@@ -70,7 +79,7 @@ fn main() -> Result<(), Error> {
     let file_path = env::current_exe().unwrap();
     println!("Current executable path: {:?}", file_path);
 
-    let _handle = log4rs::init_file("/home/jpost/Documents/Rust-Garmin/log4rs.yml", Default::default());
+    let _handle = log4rs::init_file("/home/jpost/Documents/Rust-Garmin/config/log4rs.yml", Default::default());
     match _handle {
         Ok(()) => {
             info!("Successfully loaded log config!");
@@ -80,22 +89,44 @@ fn main() -> Result<(), Error> {
             return Err(error)
         }
     }
+    
+    if matches.opt_present("disable_download") {
+        info!("Not downloading any garmin data");
+    } else {
+        let _handle = Config::builder().add_source(File::new("/home/jpost/Documents/Rust-Garmin/config/garmin_config.json", FileFormat::Json)).build();
+        match _handle {
+            Ok(config) => {
+                info!("Successfully loaded garmin config! Executing any configured downloads...");
+                
+                // login and download all configured stats
+                let mut download_manager = DownloadManager::new(config, matches.clone());
+                download_manager.login();
+                download_manager.download_all();
+            },
+            Err(error) => {
+                error!("Error loading garmin config: {:}", error);
+                return Err(Into::into(error))
+            }
+        }
+    }
 
     // create config for use with downloader
-    let _handle = Config::builder().add_source(File::new("/home/jpost/Documents/Rust-Garmin/garmin_config.json", FileFormat::Json)).build();
-    match _handle {
-        Ok(config) => {
-            info!("Successfully loaded garmin config!");
-            
-            // login and download all configured stats
-            let mut download_manager = DownloadManager::new(config, matches);
-            download_manager.login();
-            download_manager.download();
-
-        },
-        Err(error) => {
-            error!("Error loading log config: {:}", error);
-            return Err(Into::into(error))
+    if matches.opt_present("disable_upload") {
+        info!("Not uploading any garmin data");
+    } else {
+        let _handle = Config::builder().add_source(File::new("/home/jpost/Documents/Rust-Garmin/config/influxdb_config.json", FileFormat::Json)).build();
+        match _handle {
+            Ok(config) => {
+                info!("Successfully loaded influx config!");
+                
+                // spin up influx publisher and publish data
+                let mut upload_manager = UploadManager::new(config);
+                upload_manager.upload_all();
+            },
+            Err(error) => {
+                error!("Error loading influxdb config: {:}", error);
+                return Err(Into::into(error))
+            }
         }
     }
 

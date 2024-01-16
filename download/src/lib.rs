@@ -48,7 +48,6 @@ pub struct DownloadManager {
     display_name: String
 }
 
-#[allow(dead_code)]
 impl DownloadManager {
     pub fn new(config: Config, options: Matches) -> DownloadManager {
         let mut dm = DownloadManager {
@@ -101,7 +100,7 @@ impl DownloadManager {
         dm
     }
 
-    pub fn download(&mut self) {
+    pub fn download_all(&mut self) {
         if self.garmin_config.enabled_stats.activities {
             let num_activities = self.garmin_config.activities.num_activities_to_download.parse::<u32>().unwrap();
             self.get_activity_summaries(num_activities);
@@ -117,7 +116,7 @@ impl DownloadManager {
         }
         if self.garmin_config.enabled_stats.daily_summary {
             self.get_summary_day();
-        }        
+        }
     }
 
     pub fn get_user_profile(&mut self){
@@ -201,7 +200,7 @@ impl DownloadManager {
         endpoint.push_str("/activityTypes");
         self.garmin_client.api_request(&endpoint, None);
 
-        self.save_to_json_file(self.garmin_client.get_last_resp_text(), None, String::from("activity_types"), None);
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), "activity_types", None, None);
     }
 
     pub fn get_activity_summaries(&mut self, activity_count: u32) {
@@ -250,13 +249,13 @@ impl DownloadManager {
             return;
         }
         let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
-        let id = lookup["activityId"].to_string();
-        let name = lookup["activityName"].to_string();
+        let id = lookup["activityId"].to_string().replace('"', "");
+        let name = lookup["activityName"].to_string().replace('"', "");
 
         let start_datetime = &lookup["summaryDTO"]["startTimeLocal"].to_string().replace("T", " ").replace('"', "");
         match NaiveDateTime::parse_from_str(start_datetime, GARMIN_DATE_FORMAT){
             Ok(date) => {
-                self.save_to_json_file(self.garmin_client.get_last_resp_text(), Some(date), name.to_string(), Some(vec![id]));
+                self.save_to_json_file(self.garmin_client.get_last_resp_text(), "activities", Some(date),  Some(vec![name, id]));
             }, Err(e) => {
                 error!("Could not parse activity datetime: {} using format {} (error: {})", start_datetime, GARMIN_DATE_FORMAT, e);
             }
@@ -271,7 +270,7 @@ impl DownloadManager {
         endpoint.push_str(&format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
 
         self.garmin_client.api_request(&endpoint, None);
-        self.save_to_json_file(self.garmin_client.get_last_resp_text(), Some(date), String::from("monitoring"), None);
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), "monitoring", Some(date), None);
     }
 
     pub fn get_sleep(&mut self) {
@@ -286,7 +285,7 @@ impl DownloadManager {
         ]);
 
         self.garmin_client.api_request(&endpoint, Some(params));
-        self.save_to_json_file(self.garmin_client.get_last_resp_text(), Some(date), String::from("sleep"), None);
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), "sleep", Some(date), None);
     }
 
     pub fn get_resting_heart_rate(&mut self) {
@@ -302,7 +301,7 @@ impl DownloadManager {
         ]);
 
         self.garmin_client.api_request(&endpoint, Some(params));
-        self.save_to_json_file(self.garmin_client.get_last_resp_text(), Some(date), String::from("heartrate"), None);
+        self.save_to_json_file(self.garmin_client.get_last_resp_text(), "heartrate", Some(date), None);
     }
 
     pub fn get_weight(&mut self) {
@@ -317,7 +316,7 @@ impl DownloadManager {
                     ("_", &epoch_millis.as_str())
                 ]);
                 self.garmin_client.api_request(&endpoint, Some(params));
-                self.save_to_json_file(self.garmin_client.get_last_resp_text(), Some(date), String::from("weight"), None);
+                self.save_to_json_file(self.garmin_client.get_last_resp_text(), "weight", Some(date), None);
             },
             Err(_) => {}
         }
@@ -337,7 +336,7 @@ impl DownloadManager {
                     ("_", epoch_millis.as_str())
                 ]);
                 self.garmin_client.api_request(&endpoint, Some(params));
-                self.save_to_json_file(self.garmin_client.get_last_resp_text(), Some(date), String::from("day_summary"), None);
+                self.save_to_json_file(self.garmin_client.get_last_resp_text(), "day_summary", Some(date), None);
 
             }, Err(e) => {
                 warn!("Unable to properly parse date: {}. Error: {}", &date_str, e);
@@ -364,8 +363,8 @@ impl DownloadManager {
 
     fn save_to_json_file(&self, 
             data: &str,
+            sub_folder: &str,
             activity_date: Option<NaiveDateTime>,
-            filename_root: String,
             filename_addons: Option<Vec<String>>) -> (){
 
         if !self.garmin_config.file.save_to_file {
@@ -384,7 +383,7 @@ impl DownloadManager {
             }
         }
 
-        let mut filename: String = String::from(format!("{}_{}", file_date.replace('"', ""), filename_root.replace('"', "")));
+        let mut filename: String = String::from(format!("{}", file_date.replace('"', "")));
         
         match filename_addons {
             Some(s) => {
@@ -392,13 +391,12 @@ impl DownloadManager {
                     filename.push_str("-");
                     filename.push_str(&ext);
                 }
-            },
-            None => {}
+            }, None => {}
         }
 
         filename.push_str(".json");
 
-        let path = Path::new(&base_path).join(&filename);
+        let path = Path::new(&base_path).join(&sub_folder).join(&filename);
         if path.exists() {
             if !self.garmin_config.file.overwrite {
                 info!("File: {} exists, but overwrite is disabled, ignoring", path.display());
