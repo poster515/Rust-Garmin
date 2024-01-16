@@ -374,6 +374,7 @@ dependencies = [
  "chrono",
  "config",
  "futures",
+ "getopts",
  "log",
  "log4rs",
  "oauth1",
@@ -550,11 +551,12 @@ dependencies = [
 
 [[package]]
 name = "garmin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "config",
  "download",
+ "getopts",
  "log",
  "log4rs",
  "serde_derive",
@@ -568,6 +570,15 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "getopts"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
@@ -2087,6 +2098,12 @@ checksum = "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-width"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51733f11c9c4f72aa0c160008246859e340b00807569a0da0e7a1079b27ba85"
 
 [[package]]
 name = "unsafe-any-ors"

@@ -1,6 +1,6 @@
 [package]
 name = "garmin"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,4 +11,5 @@ log4rs = { version = "1.2.0", features = ["gzip"] }
 config = "0.13.4"
 serde_derive = "1.0.195"
 anyhow = "1.0.79"
+getopts = "0.2.21"
 download = { path = "../download" }

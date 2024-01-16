@@ -21,3 +21,4 @@ serde_json = "1.0.111"
 futures = "0.3.1"
 oauth1 = "1.0.0"
 tokio = { version = "1.35.1", features = ["full"] }
+getopts = "0.2.21"
