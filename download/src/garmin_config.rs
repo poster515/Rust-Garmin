@@ -20,6 +20,7 @@ pub struct DataConfig {
     pub sleep_start_date: String,
     pub rhr_start_date: String,
     pub monitoring_start_date: String,
+    pub hydration_date: String,
     pub download_today_data: bool,
 }
 
@@ -43,7 +44,8 @@ pub struct EnabledStats {
     pub sleep: bool,
     pub rhr: bool,
     pub weight: bool,
-    pub activities: bool
+    pub activities: bool,
+    pub hydration: bool
 }
 
 #[derive(Debug, Deserialize, Default)]

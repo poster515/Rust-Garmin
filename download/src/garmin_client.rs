@@ -1,9 +1,11 @@
 
 use std::collections::HashMap;
 use std::cmp::min;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use log::{error, debug, warn, info};
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use reqwest::header::HeaderMap;
 
 mod auth;
@@ -259,10 +261,12 @@ impl GarminClient {
         }
     }
 
-    pub fn api_request(&mut self, endpoint: &str, params: Option<HashMap<&str, &str>>) -> bool {
+    pub fn api_request(&mut self, 
+            endpoint: &str, 
+            params: Option<HashMap<&str, &str>>,
+            json_or_binary: bool,
+            filepath: Option<String>) -> bool {
         // use for actual application data downloads
-
-        // TODO: give filename for saving json data
         let url = self.build_api_url(endpoint).build();
 
         if self.oauth_manager.get_oauth2_token().is_expired() {
@@ -297,25 +301,67 @@ impl GarminClient {
 
         match future {
             Ok(response) => {
-                self.last_api_resp_url = response.url().to_string();
-                let get_body_future = rt.block_on({
-                    response.text()
-                });
+                if json_or_binary {
+                    self.last_api_resp_url = response.url().to_string();
+                    let get_body_future = rt.block_on({
+                        response.text()
+                    });
 
-                match get_body_future {
-                    Ok(body) => {
-                        self.last_api_resp_text = body;
-                        debug!("Got api response: {}", &self.last_api_resp_text[0..min(1024, self.last_api_resp_text.len())]);
-                        true
-                    }, Err(e) => {
-                        error!("Error parsing response body: {:?}", e);
-                        false
+                    match get_body_future {
+                        Ok(body) => {
+                            self.last_api_resp_text = body;
+                            match filepath {
+                                Some(filename) => { self.save_as_json(&self.last_api_resp_text, filename); },
+                                None => { debug!("Got api response: {}", &self.last_api_resp_text[0..min(1024, self.last_api_resp_text.len())]); }
+                            }
+                            true
+                        }, Err(e) => {
+                            error!("Error parsing response body: {:?}", e);
+                            false
+                        }
+                    }
+                } else {
+                    match filepath {
+                        Some(filename) => { self.save_as_binary(response, filename); true },
+                        None => { debug!("Got {} bytes of binary response, ignoring", response.content_length().unwrap_or(0)); false }
                     }
                 }
             }, Err(e) => {
                 error!("Error on api call: {:?}", e);
                 false
             }
+        }
+    }
+
+    fn save_as_json(&self, data: &str, filepath: String) {
+        match File::create(&filepath) {
+            Ok(file) => {
+                let mut writer = BufWriter::new(file);
+                let json_data: HashMap<String, serde_json::Value> = serde_json::from_str(data).unwrap();
+                match serde_json::to_writer_pretty(&mut writer, &json_data) {
+                    Ok(_) => {
+                        match writer.flush() {
+                            Ok(_) => {}, 
+                            Err(e) => { error!("Error flushing writer: {}", e); }
+                        }
+                    }, Err(e) => { error!("Error writing json to buffer: {}", e); }
+                }
+            }, Err(e) => { error!("Unable to create file {}, error: {}", filepath, e); }
+        }
+    }
+
+    fn save_as_binary(&self, mut response: Response, filepath: String){
+        match File::create(&filepath) {
+            Ok(mut file) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let mut num_chunks = 0;
+                while let Ok(Some(chunk)) = rt.block_on(response.chunk()) {
+                    match file.write(&chunk){
+                        Ok(_) => { num_chunks += 1; info!("Wrote chunk #{} to {}", num_chunks, &filepath); },
+                        Err(e) => { error!("Error writing chunk #{} to {}, error: {}", num_chunks, &filepath, e); }
+                    }
+                }
+            }, Err(e) => { error!("Unable to create file {}, error: {}", filepath, e); }
         }
     }
 
