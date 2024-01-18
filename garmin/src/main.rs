@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, path::Path};
 use log::{error, info};
 use anyhow::Error;
 
@@ -77,9 +77,11 @@ fn main() -> Result<(), Error> {
     // use handle to change logger configuration at runtime.
     // example use cases: https://crates.io/crates/log4rs
     let file_path = env::current_exe().unwrap();
+    let cwd: Box<Path> = env::current_dir().unwrap().as_path().into();
+
     println!("Current executable path: {:?}", file_path);
 
-    let _handle = log4rs::init_file("/home/jpost/Documents/Rust-Garmin/config/log4rs.yml", Default::default());
+    let _handle = log4rs::init_file(cwd.join("config").join("log4rs.yml"), Default::default());
     match _handle {
         Ok(()) => {
             info!("Successfully loaded log config!");
@@ -93,7 +95,7 @@ fn main() -> Result<(), Error> {
     if matches.opt_present("disable_download") {
         info!("Not downloading any garmin data");
     } else {
-        let _handle = Config::builder().add_source(File::new("/home/jpost/Documents/Rust-Garmin/config/garmin_config.json", FileFormat::Json)).build();
+        let _handle = Config::builder().add_source(File::new(cwd.join("config").join("garmin_config.json").to_str().unwrap(), FileFormat::Json)).build();
         match _handle {
             Ok(config) => {
                 info!("Successfully loaded garmin config! Executing any configured downloads...");
@@ -114,7 +116,7 @@ fn main() -> Result<(), Error> {
     if matches.opt_present("disable_upload") {
         info!("Not uploading any garmin data");
     } else {
-        let _handle = Config::builder().add_source(File::new("/home/jpost/Documents/Rust-Garmin/config/influxdb_config.json", FileFormat::Json)).build();
+        let _handle = Config::builder().add_source(File::new(cwd.join("config").join("influxdb_config.json").to_str().unwrap(), FileFormat::Json)).build();
         match _handle {
             Ok(config) => {
                 info!("Successfully loaded influx config!");

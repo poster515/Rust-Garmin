@@ -230,7 +230,9 @@ impl DownloadManager {
 
             if self.garmin_config.data.download_today_data {
                 if activity.timestamp_nanos_opt() > midnight.timestamp_nanos_opt() {
+                    // download basic info as json, and total activity as FIT file
                     self.get_activity_info(id.to_string().parse::<u64>().unwrap());
+                    self.get_activity_details(id.to_string().parse::<u64>().unwrap());
                 } else {
                     info!("Ignoring activity '{}' from: {}", &name, activity_string);
                     return;
@@ -241,7 +243,7 @@ impl DownloadManager {
     }
 
     pub fn get_activity_info(&mut self, activity_id: u64) {
-        // Given specific activity ID, retrieves all info
+        // Given specific activity ID, retrieves all basic info as json response body
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str(&format!("/{}", activity_id));
         if !self.garmin_client.api_request(&endpoint, None){
@@ -260,6 +262,19 @@ impl DownloadManager {
                 error!("Could not parse activity datetime: {} using format {} (error: {})", start_datetime, GARMIN_DATE_FORMAT, e);
             }
         }
+    }
+
+    pub fn get_activity_details(&mut self, activity_id: u64) {
+        // Given specific activity ID, retrieves activity info as FIT file
+        let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
+        endpoint.push_str(&format!("/activity/{}", activity_id));
+        if !self.garmin_client.api_request(&endpoint, None){
+            warn!("Unable to get API data. Endpoint: {}, activityId: {}", endpoint, activity_id);
+            return;
+        }
+        // should have binary data in String - just save to file
+        // self.save_to_json_file()
+        info!("Need to save contents as binary FIT file!");
     }
 
     pub fn monitoring(&mut self) {

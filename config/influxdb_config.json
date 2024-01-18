@@ -1,7 +1,8 @@
 {
     "url"               : "https://localhost:8086",
+    "org"               : "org",
     "database"          : "metrics",
-    "username"          : "joeschmoe",
-    "password"          : "greatpassword",
+    "bucket"            : "bucket",
+    "token"             : "API_TOKEN",
     "file_base_path"    : "/home/jpost/Documents/garmin_data"
 }
