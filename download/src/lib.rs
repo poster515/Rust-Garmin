@@ -273,14 +273,13 @@ impl DownloadManager {
     }
 
     pub fn monitoring(&mut self) {
-        // downloads some kind of fit file or something
         let date = self.get_download_date(&self.garmin_config.data.monitoring_start_date);
         let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
         endpoint.push_str("/wellness/");
         endpoint.push_str(&format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
         
-        let filename = self.build_file_name("monitoring", Some(date), None, ".json");
-        self.garmin_client.api_request(&endpoint, None, true, filename);
+        let filename = self.build_file_name("monitoring", Some(date), None, ".fit");
+        self.garmin_client.api_request(&endpoint, None, false, filename);
     }
 
     pub fn get_sleep(&mut self) {
@@ -428,6 +427,6 @@ impl DownloadManager {
         } else {
             info!("Saving file: {}", path.display())
         }
-        Some(filename)
+        Some(path.to_str().unwrap().to_string())
     }
 }
