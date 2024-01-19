@@ -1,20 +1,24 @@
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::ffi::OsStr;
 use chrono::{Local, NaiveDateTime};
 
+use fitparser::FitDataField;
+use fitparser::profile::field_types::MesgNum;
 use futures::stream;
 use config::Config;
 use log::{info, error, warn};
 use influxdb2::{Client, ClientBuilder};
 use influxdb2::models::data_point::DataPoint;
-use serde_json::json;
 
 mod influxdb_structs;
 use influxdb_structs::InfluxDbConfig;
+
+mod msg_type_map;
 
 // actually contains a T but we'll replace that with a 
 // space since the DateTime mod can't decode that for
@@ -143,9 +147,26 @@ impl UploadManager {
                     }
                 } else if self.get_extension_from_filename(entry.path().to_str().unwrap()) == Some("fit") {
                     let mut fp = File::open(entry.path()).unwrap();
-                    for data in fitparser::from_reader(&mut fp).unwrap() {
-                        // print the data in FIT file
-                        println!("{:#?}", data);
+                    let mut datapoints: Vec<DataPoint> = Vec::new();
+
+                    let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
+                    for record in fitparser::from_reader(&mut fp).unwrap() {
+                        let kind: &str = &record.kind().to_string();
+                        let data = DataPoint::builder("activities").tag("kind", kind);
+                        match msp_field_mapping.get(kind) {
+                            Some(known_field_types) => {
+                                let valid_set: HashSet<&&str> = known_field_types.iter().filter(|&f| !f.contains("unknown") && !f.contains("timestamp")).collect();
+                                
+                                for field in record.fields() {
+                                    if valid_set.contains(&field.name()) {
+                                        // TODO: fix this struct move
+                                        // data.field(String::from(field.name()), "field.value()");
+                                    }
+                                }
+                            }, None => {
+                                warn!("Unknown FitDataField type: {:?}, unsure how to convert to DataPoint", kind);
+                            }
+                        }
                     }
                 }
             }
@@ -164,11 +185,11 @@ impl UploadManager {
                         let reader = BufReader::new(file);
                         let sleep: HashMap<String, serde_json::Value> = serde_json::from_reader(reader).unwrap();
                         
-                        let restless_moments = json!(sleep["sleepRestlessMoments"]);
-                        let sleep_levels = json!(sleep["sleepLevels"]);
-                        let hrv = json!(sleep["hrv"]);
-                        let sleep_stress = json!(sleep["sleepStress"]);
-                        let sleep_movement = json!(sleep["sleepMovement"]);
+                        // let restless_moments = json!(sleep["sleepRestlessMoments"]);
+                        // let sleep_levels = json!(sleep["sleepLevels"]);
+                        // let hrv = json!(sleep["hrv"]);
+                        // let sleep_stress = json!(sleep["sleepStress"]);
+                        // let sleep_movement = json!(sleep["sleepMovement"]);
                     }, Err(e) => { error!("Unable to open file: {}, error: {:?}", entry.path().to_str().unwrap(), e) }
                 }
             }
