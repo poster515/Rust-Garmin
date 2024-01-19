@@ -47,6 +47,7 @@ impl UploadManager {
         self.upload_summary_data();
         self.upload_weight_data();
         self.upload_sleep();
+        self.upload_monitoring();
     }
 
     fn garmin_ts_to_nanos_since_epoch(&self, ts: &str) -> i64 {
@@ -108,7 +109,8 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                if self.get_extension_from_filename(entry.path().to_str().unwrap()) == Some("json") {
+                let filename: String = String::from(entry.path().to_str().unwrap());
+                if self.get_extension_from_filename(&filename) == Some("json") {
                     match File::open(entry.path()) {
                         Ok(file) => {
                             let reader = BufReader::new(file);
@@ -145,58 +147,34 @@ impl UploadManager {
 
                         }, Err(e) => { error!("Failed to open file {:?}, error: {}", entry.path(), e); }
                     }
-                } else if self.get_extension_from_filename(entry.path().to_str().unwrap()) == Some("fit") {
-                    let mut fp = File::open(entry.path()).unwrap();
-                    let mut datapoints: Vec<DataPoint> = Vec::new();
-                    let id = self.get_activity_id_from_filename(entry.path().to_str().unwrap());
-
+                } else if self.get_extension_from_filename(&filename) == Some("fit") {
                     // we could use the below mapping to filter out fields for certain record kinds,
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
                     let records_of_interest: HashSet<&str> = HashSet::from(["record", "session", "time_in_zone"]);
-
-                    for record in fitparser::from_reader(&mut fp).unwrap() {
-                        let kind: &str = &record.kind().to_string();
-                        if !records_of_interest.contains(kind) { continue; }
-
-                        let mut data = DataPoint::builder("activities").tag("id", id);
-                        for field in record.into_vec() {
-                            if field.name() == "timestamp" {
-                                match NaiveDateTime::parse_from_str(&field.value().to_string().replace('"', ""), GARMIN_FIT_DATE_FORMAT){
-                                    Ok(ts) => { data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); },
-                                    Err(e) => { 
-                                        error!("Unable to parse timestamp from 'timestamp' field value: {} in record type {}. Error: {}", &field.value(), kind, e);
-                                        break;
-                                    }
-                                }
-                            // some records have fields like 'unknown_field_X' - ignore those.
-                            // some records have another field called 'local_timestamp' - just ignore those too.
-                            } else if !field.name().contains("unknown") && !field.name().contains("timestamp") {
-                                match field.value().to_string().parse::<f64>() {
-                                    Ok(value) => { data = data.field(String::from(field.name()), value); },
-                                    Err(e) => { warn!("Unable to coerce field {} value into f64. Error: {}", field.name(), e); }
-                                }
-                            }
-                        }
-                        match data.build() {
-                            Ok(datapoint) => { datapoints.push(datapoint); },
-                            Err(e) => { warn!("Unable to build datapoint for record {}, error: {}", kind, e); }
-                        }
-                    }
-                    // finally write all record datapoints 
-                    self.write_data(datapoints);
+                    let id = self.get_activity_id_from_filename(&filename);
+                    self.parse_fit_file(&filename, "activity", records_of_interest, Some(vec![("id".to_string(), id)]));
                 }
             }
         }
     }
 
     fn get_activity_id_from_filename<'a>(&self, filename: &'a str) -> String {
-        let re = Regex::new(r".*\\(\d+)_ACTIVITY\.fit").unwrap();
+        let re = Regex::new(r".*[\/|\\](\d+)_ACTIVITY\.fit").unwrap();
         for (_, [id]) in re.captures_iter(filename).map(|c| c.extract()) {
             return String::from(id);
         }
         error!("====================================================");
-        panic!("Unable to activity id in filename: {}", filename);
+        panic!("Unable to parse activity id in filename: {}", filename);
+    }
+
+    fn get_monitoring_metric_from_filename<'a>(&self, filename: &'a str) -> String {
+        let re = Regex::new(r".*[\/|\\]\d*_(.*)\.fit").unwrap();
+        for (_, [metric]) in re.captures_iter(filename).map(|c| c.extract()) {
+            return String::from(metric);
+        }
+        error!("====================================================");
+        panic!("Unable to parse monitoring metrics in filename: {}", filename);
     }
 
     fn upload_sleep(&mut self) {
@@ -257,5 +235,89 @@ impl UploadManager {
                 println!("{:?}", entry.path());
             }
         }
+    }
+
+    fn upload_monitoring(&mut self) {
+        let base_path = String::from(&self.influx_config.file_base_path);
+        let folder = Path::new(&base_path).join("monitoring");
+        if !folder.exists() {
+            return;
+        }
+        for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
+            if let Ok(entry) = entry {
+                let filename: String = String::from(entry.path().to_str().unwrap());
+                if self.get_extension_from_filename(&filename) == Some("fit") {
+                    // we could use the below mapping to filter out fields for certain record kinds,
+                    // but for now we'll scrape ALL valid fields and upload to DB. 
+                    // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_monitoring_map();
+                    let records_of_interest: HashSet<&str> = HashSet::from(["sleep_level", "sleep_assessment", "hrv_status_summary", "hrv_value", "respiration_rate", "monitoring_hr_data", "monitoring_info"]);
+
+                    let monitoring_metric = self.get_monitoring_metric_from_filename(&filename);
+                    self.parse_fit_file(&filename, "monitoring", records_of_interest, Some(vec![("metric".to_string(), monitoring_metric)]));
+                }
+            }
+        }
+    }
+
+    fn parse_fit_file(&mut self, filename: &str, measurement: &str, records_of_interest: HashSet<&str>, tags: Option<Vec<(String, String)>>){
+        let mut fp = File::open(filename).unwrap();
+        let mut datapoints: Vec<DataPoint> = Vec::new();
+
+        // let mut record_map: HashMap<String, HashSet<String>> = HashMap::new();
+
+        for record in fitparser::from_reader(&mut fp).unwrap() {
+            let kind: &str = &record.kind().to_string();
+
+            // match record_map.get_mut(kind) {
+            //     Some(set) => {
+            //         for field in record.fields() {
+            //             set.insert(String::from(field.name()));
+            //         }
+            //     }, None => {
+            //         let mut set: HashSet<String> = HashSet::new();
+            //         for field in record.fields() {
+            //             set.insert(String::from(field.name()));
+            //         }
+            //         record_map.insert(kind.to_string(), set);
+            //     }
+            // }
+            
+            if !records_of_interest.contains(kind) { continue; }
+
+            let mut data = DataPoint::builder(measurement);
+            match tags {
+                Some(ref t) => { for (tag, value) in t { data = data.tag(tag, value); }},
+                None => {}
+            }
+
+            for field in record.into_vec() {
+                if field.name() == "timestamp" {
+                    match NaiveDateTime::parse_from_str(&field.value().to_string().replace('"', ""), GARMIN_FIT_DATE_FORMAT){
+                        Ok(ts) => { data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); },
+                        Err(e) => { 
+                            error!("Unable to parse timestamp from 'timestamp' field value: {} in record type {}. Error: {}", &field.value(), kind, e);
+                            break;
+                        }
+                    }
+                // some records have fields like 'unknown_field_X' - ignore those.
+                // some records have another field called 'local_timestamp' - just ignore those too.
+                } else if !field.name().contains("unknown") && !field.name().contains("timestamp") {
+                    match field.value().to_string().parse::<f64>() {
+                        Ok(value) => { data = data.field(String::from(field.name()), value); },
+                        Err(e) => { warn!("Unable to coerce field {} value into f64. Error: {}", field.name(), e); }
+                    }
+                }
+            }
+            match data.build() {
+                Ok(datapoint) => { datapoints.push(datapoint); },
+                Err(e) => { warn!("Unable to build datapoint for record {}, error: {}", kind, e); }
+            }
+        }
+
+        // for (rec_type, field_names) in record_map {
+        //     println!("{}: {:?}", rec_type, field_names);
+        // }
+        // finally write all record datapoints 
+        self.write_data(datapoints);
     }
 }

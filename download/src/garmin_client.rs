@@ -374,11 +374,8 @@ impl GarminClient {
 
         for i in 0..archive.len() {
             let mut file = archive.by_index(i).unwrap();
-            println!("Filename: {}, Size: {}", file.name(), file.size());
-
             let mut buffer: Vec<u8> = vec![];
             std::io::copy(&mut file, &mut buffer).expect("Unable to copy archive file contents to buffer :(");
-            info!("Buffered {} bytes into vec buffer", buffer.len());
 
             // get folder from filepath
             let new_path = Path::new(&filepath).parent().unwrap().join(&file.name());
