@@ -259,28 +259,39 @@ impl UploadManager {
         }
     }
 
-    fn parse_fit_file(&mut self, filename: &str, measurement: &str, records_of_interest: HashSet<&str>, tags: Option<Vec<(String, String)>>){
+    #[allow(dead_code)]
+    fn examine_fit_file_records(&self, filename: &str){
+        // use this to print all fields in all records in a fit file. just prints them to screen.
         let mut fp = File::open(filename).unwrap();
-        let mut datapoints: Vec<DataPoint> = Vec::new();
-
-        // let mut record_map: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut record_map: HashMap<String, HashSet<String>> = HashMap::new();
 
         for record in fitparser::from_reader(&mut fp).unwrap() {
             let kind: &str = &record.kind().to_string();
 
-            // match record_map.get_mut(kind) {
-            //     Some(set) => {
-            //         for field in record.fields() {
-            //             set.insert(String::from(field.name()));
-            //         }
-            //     }, None => {
-            //         let mut set: HashSet<String> = HashSet::new();
-            //         for field in record.fields() {
-            //             set.insert(String::from(field.name()));
-            //         }
-            //         record_map.insert(kind.to_string(), set);
-            //     }
-            // }
+            match record_map.get_mut(kind) {
+                Some(set) => {
+                    for field in record.fields() {
+                        set.insert(String::from(field.name()));
+                    }
+                }, None => {
+                    let mut set: HashSet<String> = HashSet::new();
+                    for field in record.fields() {
+                        set.insert(String::from(field.name()));
+                    }
+                    record_map.insert(kind.to_string(), set);
+                }
+            }
+        }
+
+        for (rec_type, field_names) in record_map { println!("{}: {:?}", rec_type, field_names); }
+    }
+
+    fn parse_fit_file(&mut self, filename: &str, measurement: &str, records_of_interest: HashSet<&str>, tags: Option<Vec<(String, String)>>){
+        let mut fp = File::open(filename).unwrap();
+        let mut datapoints: Vec<DataPoint> = Vec::new();
+
+        for record in fitparser::from_reader(&mut fp).unwrap() {
+            let kind: &str = &record.kind().to_string();
             
             if !records_of_interest.contains(kind) { continue; }
 
@@ -314,10 +325,6 @@ impl UploadManager {
             }
         }
 
-        // for (rec_type, field_names) in record_map {
-        //     println!("{}: {:?}", rec_type, field_names);
-        // }
-        // finally write all record datapoints 
         self.write_data(datapoints);
     }
 }
