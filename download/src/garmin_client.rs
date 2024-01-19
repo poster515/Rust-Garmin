@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use std::cmp::min;
 use std::fs;
 use std::fs::File;
-use std::io::prelude::*;
-use std::io::{BufWriter, Write, Read};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use log::{error, debug, warn, info};
 use regex::Regex;
@@ -378,13 +377,13 @@ impl GarminClient {
             println!("Filename: {}, Size: {}", file.name(), file.size());
 
             let mut buffer: Vec<u8> = vec![];
-            std::io::copy(&mut file, &mut buffer);
+            std::io::copy(&mut file, &mut buffer).expect("Unable to copy archive file contents to buffer :(");
             info!("Buffered {} bytes into vec buffer", buffer.len());
 
             // get folder from filepath
             let new_path = Path::new(&filepath).parent().unwrap().join(&file.name());
             info!("Saving FIT file contents: {}", new_path.display());
-            fs::write(new_path, &buffer);
+            fs::write(new_path, &buffer).expect("Unable to write FIT file contents :(");
         }
     }
 

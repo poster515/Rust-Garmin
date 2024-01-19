@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 // this map provides all (currently known) FitDataFields for each FitDataRecordType
+#[allow(dead_code)]
 pub fn get_map() -> HashMap<&'static str, HashSet<&'static str>>  { 
     HashMap::from([
         ("288", HashSet::from(["unknown_field_253"])),

@@ -7,13 +7,12 @@ use std::path::Path;
 use std::ffi::OsStr;
 use chrono::{Local, NaiveDateTime};
 
-use fitparser::FitDataField;
-use fitparser::profile::field_types::MesgNum;
 use futures::stream;
 use config::Config;
 use log::{info, error, warn};
 use influxdb2::{Client, ClientBuilder};
 use influxdb2::models::data_point::DataPoint;
+use regex::Regex;
 
 mod influxdb_structs;
 use influxdb_structs::InfluxDbConfig;
@@ -23,7 +22,8 @@ mod msg_type_map;
 // actually contains a T but we'll replace that with a 
 // space since the DateTime mod can't decode that for
 // some reason.
-const GARMIN_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.3f";
+const GARMIN_JSON_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.3f";
+const GARMIN_FIT_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
 
 // Class for downloading health data from Garmin Connect.
 pub struct UploadManager {
@@ -51,7 +51,7 @@ impl UploadManager {
 
     fn garmin_ts_to_nanos_since_epoch(&self, ts: &str) -> i64 {
         let timestamp = ts.replace('T', " ");
-        match NaiveDateTime::parse_from_str(&timestamp, GARMIN_DATE_FORMAT) {
+        match NaiveDateTime::parse_from_str(&timestamp, GARMIN_JSON_DATE_FORMAT) {
             Ok(timestamp_dt) => { timestamp_dt.timestamp_nanos_opt().unwrap() },
             Err(e) => { 
                 error!("Error getting timestamp from: {}, e: {:?}, using current time...", ts, e);
@@ -148,30 +148,57 @@ impl UploadManager {
                 } else if self.get_extension_from_filename(entry.path().to_str().unwrap()) == Some("fit") {
                     let mut fp = File::open(entry.path()).unwrap();
                     let mut datapoints: Vec<DataPoint> = Vec::new();
+                    let id = self.get_activity_id_from_filename(entry.path().to_str().unwrap());
 
-                    let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
+                    // we could use the below mapping to filter out fields for certain record kinds,
+                    // but for now we'll scrape ALL valid fields and upload to DB. 
+                    // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
+                    let records_of_interest: HashSet<&str> = HashSet::from(["record", "session", "time_in_zone"]);
+
                     for record in fitparser::from_reader(&mut fp).unwrap() {
                         let kind: &str = &record.kind().to_string();
-                        let data = DataPoint::builder("activities").tag("kind", kind);
-                        match msp_field_mapping.get(kind) {
-                            Some(known_field_types) => {
-                                let valid_set: HashSet<&&str> = known_field_types.iter().filter(|&f| !f.contains("unknown") && !f.contains("timestamp")).collect();
-                                
-                                for field in record.fields() {
-                                    if valid_set.contains(&field.name()) {
-                                        // TODO: fix this struct move
-                                        // data.field(String::from(field.name()), "field.value()");
+                        if !records_of_interest.contains(kind) { continue; }
+
+                        let mut data = DataPoint::builder("activities").tag("id", id);
+                        for field in record.into_vec() {
+                            if field.name() == "timestamp" {
+                                match NaiveDateTime::parse_from_str(&field.value().to_string().replace('"', ""), GARMIN_FIT_DATE_FORMAT){
+                                    Ok(ts) => { data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); },
+                                    Err(e) => { 
+                                        error!("Unable to parse timestamp from 'timestamp' field value: {} in record type {}. Error: {}", &field.value(), kind, e);
+                                        break;
                                     }
                                 }
-                            }, None => {
-                                warn!("Unknown FitDataField type: {:?}, unsure how to convert to DataPoint", kind);
+                            // some records have fields like 'unknown_field_X' - ignore those.
+                            // some records have another field called 'local_timestamp' - just ignore those too.
+                            } else if !field.name().contains("unknown") && !field.name().contains("timestamp") {
+                                match field.value().to_string().parse::<f64>() {
+                                    Ok(value) => { data = data.field(String::from(field.name()), value); },
+                                    Err(e) => { warn!("Unable to coerce field {} value into f64. Error: {}", field.name(), e); }
+                                }
                             }
                         }
+                        match data.build() {
+                            Ok(datapoint) => { datapoints.push(datapoint); },
+                            Err(e) => { warn!("Unable to build datapoint for record {}, error: {}", kind, e); }
+                        }
                     }
+                    // finally write all record datapoints 
+                    self.write_data(datapoints);
                 }
             }
         }
     }
+
+    fn get_activity_id_from_filename<'a>(&self, filename: &'a str) -> String {
+        let re = Regex::new(r".*\\(\d+)_ACTIVITY\.fit").unwrap();
+        for (_, [id]) in re.captures_iter(filename).map(|c| c.extract()) {
+            return String::from(id);
+        }
+        error!("====================================================");
+        panic!("Unable to activity id in filename: {}", filename);
+    }
+
     fn upload_sleep(&mut self) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("sleep");
@@ -181,9 +208,9 @@ impl UploadManager {
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
                 match File::open(entry.path()) {
-                    Ok(file) => {
-                        let reader = BufReader::new(file);
-                        let sleep: HashMap<String, serde_json::Value> = serde_json::from_reader(reader).unwrap();
+                    Ok(_file) => {
+                        // let reader = BufReader::new(file);
+                        // let sleep: HashMap<String, serde_json::Value> = serde_json::from_reader(reader).unwrap();
                         
                         // let restless_moments = json!(sleep["sleepRestlessMoments"]);
                         // let sleep_levels = json!(sleep["sleepLevels"]);
