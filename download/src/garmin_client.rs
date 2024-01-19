@@ -1,12 +1,16 @@
 
 use std::collections::HashMap;
 use std::cmp::min;
+use std::fs;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::prelude::*;
+use std::io::{BufWriter, Write, Read};
+use std::path::Path;
 use log::{error, debug, warn, info};
 use regex::Regex;
 use reqwest::{Client, Response};
 use reqwest::header::HeaderMap;
+use zip;
 
 mod auth;
 
@@ -351,17 +355,36 @@ impl GarminClient {
     }
 
     fn save_as_binary(&self, mut response: Response, filepath: String){
+        // .FIT files are saved as .ZIP files FYI
         match File::create(&filepath) {
             Ok(mut file) => {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 let mut num_chunks = 0;
                 while let Ok(Some(chunk)) = rt.block_on(response.chunk()) {
                     match file.write(&chunk){
-                        Ok(_) => { num_chunks += 1; info!("Wrote chunk #{} to {}", num_chunks, &filepath); },
+                        Ok(_) => { num_chunks += 1; info!("Wrote chunk #{} to {}. Size: {}", num_chunks, &filepath, &chunk.len()); },
                         Err(e) => { error!("Error writing chunk #{} to {}, error: {}", num_chunks, &filepath, e); }
                     }
                 }
-            }, Err(e) => { error!("Unable to create file {}, error: {}", filepath, e); }
+            }, Err(e) => { error!("Unable to create file {}, error: {}", &filepath, e); }
+        }
+        // now unzip the downloaded zip
+        info!("Attempting to unzip files...");
+        let file = File::open(&filepath).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i).unwrap();
+            println!("Filename: {}, Size: {}", file.name(), file.size());
+
+            let mut buffer: Vec<u8> = vec![];
+            std::io::copy(&mut file, &mut buffer);
+            info!("Buffered {} bytes into vec buffer", buffer.len());
+
+            // get folder from filepath
+            let new_path = Path::new(&filepath).parent().unwrap().join(&file.name());
+            info!("Saving FIT file contents: {}", new_path.display());
+            fs::write(new_path, &buffer);
         }
     }
 

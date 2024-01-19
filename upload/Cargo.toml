@@ -23,3 +23,5 @@ oauth1 = "1.0.0"
 tokio = { version = "1.35.1", features = ["full"] }
 getopts = "0.2.21"
 influxdb2 = "0.4.5"
+fitparser = "0.6.1"
+zip = "0.6"

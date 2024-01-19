@@ -261,24 +261,25 @@ impl DownloadManager {
     }
 
     pub fn get_activity_details(&mut self, activity_id: u64) {
-        // Given specific activity ID, retrieves activity info as FIT file
+        // activity data downloaded as a zip file containing the fit file.
         let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
         endpoint.push_str(&format!("/activity/{}", activity_id));
 
         info!("====================================================");
         info!("Getting details for activity {:}", &activity_id);
 
-        let filename = self.build_file_name("activities", None, Some(vec![activity_id.to_string()]), ".fit");
+        let filename = self.build_file_name("activities", None, Some(vec![activity_id.to_string()]), ".zip");
         self.garmin_client.api_request(&endpoint, None, false, filename);
     }
 
     pub fn monitoring(&mut self) {
+        // monitoring data downloaded as a zip file containing the fit file.
         let date = self.get_download_date(&self.garmin_config.data.monitoring_start_date);
         let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
         endpoint.push_str("/wellness/");
         endpoint.push_str(&format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
         
-        let filename = self.build_file_name("monitoring", Some(date), None, ".fit");
+        let filename = self.build_file_name("monitoring", Some(date), None, ".zip");
         self.garmin_client.api_request(&endpoint, None, false, filename);
     }
 

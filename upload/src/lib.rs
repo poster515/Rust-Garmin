@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::ffi::OsStr;
 use chrono::{Local, NaiveDateTime};
 
 use futures::stream;
@@ -37,7 +38,7 @@ impl UploadManager {
     }
 
     pub fn upload_all(&mut self) {
-        self.upload_activity_data();
+        self.upload_activity_info();
         self.upload_heart_rate_data();
         self.upload_summary_data();
         self.upload_weight_data();
@@ -91,7 +92,11 @@ impl UploadManager {
         }
     }
 
-    fn upload_activity_data(&mut self) {
+    fn get_extension_from_filename<'a>(&'a self, filename: &'a str) -> Option<&str> {
+        Path::new(filename).extension().and_then(OsStr::to_str)
+    }
+
+    fn upload_activity_info(&mut self) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("activities");
         if !folder.exists() {
@@ -99,41 +104,49 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                match File::open(entry.path()) {
-                    Ok(file) => {
-                        let reader = BufReader::new(file);
-                        let activity: HashMap<String, serde_json::Value> = serde_json::from_reader(reader).unwrap();
-                        let activity_data = &activity["summaryDTO"];
+                if self.get_extension_from_filename(entry.path().to_str().unwrap()) == Some("json") {
+                    match File::open(entry.path()) {
+                        Ok(file) => {
+                            let reader = BufReader::new(file);
+                            let activity: HashMap<String, serde_json::Value> = serde_json::from_reader(reader).unwrap();
+                            let activity_data = &activity["summaryDTO"];
 
-                        let timestamp = self.garmin_ts_to_nanos_since_epoch(activity_data["startTimeLocal"].as_str().unwrap());
+                            let timestamp = self.garmin_ts_to_nanos_since_epoch(activity_data["startTimeLocal"].as_str().unwrap());
 
-                        let data = DataPoint::builder("activities")
-                            .tag("type",                        activity["activityName"].to_string())
-                            .field("activityTrainingLoad",      activity_data["activityTrainingLoad"].as_f64().unwrap())
-                            .field("anaerobicTrainingEffect",   activity_data["anaerobicTrainingEffect"].as_f64().unwrap())
-                            .field("averageHR",                 activity_data["averageHR"].as_f64().unwrap())
-                            .field("averageSpeed",              activity_data["averageSpeed"].as_f64().unwrap())
-                            .field("avgRespirationRate",        activity_data["avgRespirationRate"].as_f64().unwrap())
-                            .field("bmrCalories",               activity_data["bmrCalories"].as_f64().unwrap())
-                            .field("calories",                  activity_data["calories"].as_f64().unwrap())
-                            .field("distance",                  activity_data["distance"].as_f64().unwrap())
-                            .field("duration",                  activity_data["duration"].as_f64().unwrap())
-                            .field("elapsedDuration",           activity_data["elapsedDuration"].as_f64().unwrap())
-                            .field("maxHR",                     activity_data["maxHR"].as_f64().unwrap())
-                            .field("maxRespirationRate",        activity_data["maxRespirationRate"].as_f64().unwrap())
-                            .field("minActivityLapDuration",    activity_data["minActivityLapDuration"].as_f64().unwrap())
-                            .field("minRespirationRate",        activity_data["minRespirationRate"].as_f64().unwrap())
-                            .field("moderateIntensityMinutes",  activity_data["moderateIntensityMinutes"].as_f64().unwrap())
-                            .field("movingDuration",            activity_data["movingDuration"].as_f64().unwrap())
-                            .field("steps",                     activity_data["steps"].as_i64().unwrap())
-                            .field("trainingEffect",            activity_data["trainingEffect"].as_f64().unwrap())
-                            .field("vigorousIntensityMinutes",  activity_data["vigorousIntensityMinutes"].as_f64().unwrap())
-                            .timestamp(timestamp)
-                            .build();
+                            let data = DataPoint::builder("activities")
+                                .tag("type",                        activity["activityName"].to_string())
+                                .field("activityTrainingLoad",      activity_data["activityTrainingLoad"].as_f64().unwrap())
+                                .field("anaerobicTrainingEffect",   activity_data["anaerobicTrainingEffect"].as_f64().unwrap())
+                                .field("averageHR",                 activity_data["averageHR"].as_f64().unwrap())
+                                .field("averageSpeed",              activity_data["averageSpeed"].as_f64().unwrap())
+                                .field("avgRespirationRate",        activity_data["avgRespirationRate"].as_f64().unwrap())
+                                .field("bmrCalories",               activity_data["bmrCalories"].as_f64().unwrap())
+                                .field("calories",                  activity_data["calories"].as_f64().unwrap())
+                                .field("distance",                  activity_data["distance"].as_f64().unwrap())
+                                .field("duration",                  activity_data["duration"].as_f64().unwrap())
+                                .field("elapsedDuration",           activity_data["elapsedDuration"].as_f64().unwrap())
+                                .field("maxHR",                     activity_data["maxHR"].as_f64().unwrap())
+                                .field("maxRespirationRate",        activity_data["maxRespirationRate"].as_f64().unwrap())
+                                .field("minActivityLapDuration",    activity_data["minActivityLapDuration"].as_f64().unwrap())
+                                .field("minRespirationRate",        activity_data["minRespirationRate"].as_f64().unwrap())
+                                .field("moderateIntensityMinutes",  activity_data["moderateIntensityMinutes"].as_f64().unwrap())
+                                .field("movingDuration",            activity_data["movingDuration"].as_f64().unwrap())
+                                .field("steps",                     activity_data["steps"].as_i64().unwrap())
+                                .field("trainingEffect",            activity_data["trainingEffect"].as_f64().unwrap())
+                                .field("vigorousIntensityMinutes",  activity_data["vigorousIntensityMinutes"].as_f64().unwrap())
+                                .timestamp(timestamp)
+                                .build();
 
-                        self.write_data(vec![data.unwrap()]);
+                            self.write_data(vec![data.unwrap()]);
 
-                    }, Err(e) => { error!("Failed to open file {:?}, error: {}", entry.path(), e); }
+                        }, Err(e) => { error!("Failed to open file {:?}, error: {}", entry.path(), e); }
+                    }
+                } else if self.get_extension_from_filename(entry.path().to_str().unwrap()) == Some("fit") {
+                    let mut fp = File::open(entry.path()).unwrap();
+                    for data in fitparser::from_reader(&mut fp).unwrap() {
+                        // print the data in FIT file
+                        println!("{:#?}", data);
+                    }
                 }
             }
         }
