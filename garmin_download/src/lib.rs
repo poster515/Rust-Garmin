@@ -6,15 +6,26 @@ use getopts::Matches;
 use log::{debug, error, info, warn};
 use std::path::Path;
 
+use garmin_client;
+
 mod garmin_config;
-mod garmin_client;
 mod garmin_structs;
 
 pub use crate::garmin_client::{GarminClient, ClientTraits};
 pub use crate::garmin_config::GarminConfig;
 pub use crate::garmin_structs::PersonalInfo;
 
-// Class for downloading health data from Garmin Connect.
+
+/// Class for downloading health data from Garmin Connect.
+/// This class requires the garmin_client crate to provide authentication
+/// and authorization for to the garmin backend, and contains all the 
+/// target urls for downloading various health and activity data.
+///
+/// This class is intended to be provided a Config item based on the 
+/// garmin_structs.rs (see ../config/garmin_config.json for an example),
+/// and is intended to be run on a scheduled basis, although future
+/// session management improvement will allow this to be more of a 
+/// command line utility.
 #[allow(dead_code)]
 pub struct DownloadManager {
     
@@ -45,6 +56,15 @@ pub struct DownloadManager {
 }
 
 impl DownloadManager {
+    /// This constructor expects a config and optional Matches overrides, allowing for
+    /// a more CLI-friendly control flow.
+    ///
+    /// 'options' parameters:<br />
+    ///     &nbsp;&nbsp;&nbsp;&nbsp;"u": "YYY-MM-DD" -> overrides the download date for summary info (JSON)<br />
+    ///     &nbsp;&nbsp;&nbsp;&nbsp;"w": "YYY-MM-DD" -> overrides the download date for weight info (JSON)<br />
+    ///     &nbsp;&nbsp;&nbsp;&nbsp;"s": "YYY-MM-DD" -> overrides the download date for sleeep info (JSON)<br />
+    ///     &nbsp;&nbsp;&nbsp;&nbsp;"r": "YYY-MM-DD" -> overrides the download date for heart_rate info (JSON)<br />
+    ///     &nbsp;&nbsp;&nbsp;&nbsp;"m": "YYY-MM-DD" -> overrides the download date for monitoring data (FIT file)<br />
     pub fn new(config: Config, options: Matches) -> DownloadManager {
         let mut dm = DownloadManager {
             garmin_connect_user_profile_url: String::from("userprofile-service/userprofile"),
@@ -96,6 +116,7 @@ impl DownloadManager {
         dm
     }
 
+    /// Downloads all data enabled in config provided in 'new()'
     pub fn download_all(&mut self) {
         if self.garmin_config.enabled_stats.activities {
             let num_activities = self.garmin_config.activities.num_activities_to_download.parse::<u32>().unwrap();
@@ -121,6 +142,9 @@ impl DownloadManager {
         }
     }
 
+    /// Retrives user profile, which includes fields like displayName and fullName.
+    ///
+    /// User can retrieve full text via
     pub fn get_user_profile(&mut self){
         // response will contain displayName and fullName
         self.garmin_client.api_request(&self.garmin_user_profile_url, None, true, None);
@@ -138,6 +162,7 @@ impl DownloadManager {
         }
     }
 
+    /// Retrieves the user's display name.
     pub fn get_display_name(&mut self) -> String {
         if self.display_name.len() == 0 {
             self.get_user_profile();
@@ -145,6 +170,7 @@ impl DownloadManager {
         return String::from(&self.display_name);
     }
 
+    /// Retrieves the user's full name.
     pub fn get_full_name(&mut self) -> String {
         if self.full_name.len() == 0 {
             self.get_user_profile();
@@ -167,6 +193,7 @@ impl DownloadManager {
         }
     }
 
+    /// Logins in using the configured username and password.
     pub fn login(&mut self) {
         // connect to domain using login url
         let username: &str = &self.garmin_config.credentials.user;
@@ -178,6 +205,7 @@ impl DownloadManager {
         self.garmin_client.login(username, password);
     }
 
+    /// Retrieves and prints the user's personal info (e.g., userId, birthday, email, etc)
     pub fn get_personal_info(&mut self) {
         let mut personal_info_endpoint: String = String::from(&self.garmin_connect_user_profile_url);
         personal_info_endpoint.push_str("/personal-information");
@@ -196,6 +224,7 @@ impl DownloadManager {
         )
     }
 
+    /// Retrieves the activity: activityId mapping from garmin.
     pub fn get_activity_types(&mut self) {
         // retrieves all possible activity types from Garmin. Included activityTypeIds for each.
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
@@ -204,6 +233,10 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint, None, true, filename);
     }
 
+    /// Downloads last activity_count JSON summary and associated FIT files.
+    ///
+    /// If this DownloadManager was configured with 'download_today_data': true
+    /// then only those activities that occurred today will be actually saved.
     pub fn get_activity_summaries(&mut self, activity_count: u32) {
         // get high level activity summary, each entry contains activity ID that
         // can be used to get more specific info
@@ -248,6 +281,11 @@ impl DownloadManager {
         }
     }
 
+    /// Downloads JSON info for a particular activity ID, as JSON. 
+    ///
+    /// While this DownloadManager provides a progammatic way of doing 
+    /// this, you can go to your activity on the garmin connect website,
+    /// get the id via the url, and provide that ID to this function.
     pub fn get_activity_info(&mut self, activity_id: u64) {
         // Given specific activity ID, retrieves all basic info as json response body
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
@@ -260,6 +298,11 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint, None, true, filename);
     }
 
+    /// Downloads FIT file for a particular activity ID. 
+    ///
+    /// While this DownloadManager provides a progammatic way of doing 
+    /// this, you can go to your activity on the garmin connect website,
+    /// get the id via the url, and provide that ID to this function.
     pub fn get_activity_details(&mut self, activity_id: u64) {
         // activity data downloaded as a zip file containing the fit file.
         let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
@@ -272,6 +315,7 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint, None, false, filename);
     }
 
+    /// Downloads FIT file info for the configured monitoring date.
     pub fn monitoring(&mut self) {
         // monitoring data downloaded as a zip file containing the fit file.
         let date = self.get_download_date(&self.garmin_config.data.monitoring_start_date);
@@ -283,6 +327,7 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint, None, false, filename);
     }
 
+    /// Downloads sleep info as JSON file, for the configured sleep date.
     pub fn get_sleep(&mut self) {
         let date = self.get_download_date(&self.garmin_config.data.sleep_start_date);
         let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
@@ -298,6 +343,7 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint, Some(params), true, filename);
     }
 
+    /// Downloads resting heart rate info as JSON file, for the configured date.
     pub fn get_resting_heart_rate(&mut self) {
         let date = self.get_download_date(&self.garmin_config.data.rhr_start_date);
         let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
@@ -313,6 +359,7 @@ impl DownloadManager {
         self.garmin_client.api_request(&endpoint, Some(params), true, filename);
     }
 
+     /// Downloads weight info as JSON file, for the configured date.
     pub fn get_weight(&mut self) {
         let date = self.get_download_date(&self.garmin_config.data.weight_start_date);
         let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
@@ -331,6 +378,7 @@ impl DownloadManager {
         }
     }
 
+     /// Downloads summary info as JSON file, for the configured date.
     pub fn get_summary_day(&mut self) {
         let date = self.get_download_date(&self.garmin_config.data.summary_date);
         let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
@@ -353,6 +401,7 @@ impl DownloadManager {
         }
     }
 
+     /// Downloads hydration info as JSON file, for the configured date.
     pub fn get_hydration(&mut self) {
         let date = self.get_download_date(&self.garmin_config.data.hydration_date);
         let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));

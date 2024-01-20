@@ -2,5 +2,6 @@
 
 members = [
     "garmin",
-    "download"
+    "garmin_download",
+    "garmin_client"
 ]

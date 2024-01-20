@@ -5,7 +5,6 @@ use serde_derive::Deserialize;
 pub struct InfluxDbConfig {
     pub url: String,
     pub org: String,
-    pub database: String,
     pub bucket: String,
     pub token: String,
     pub file_base_path: String

@@ -12,5 +12,6 @@ config = "0.13.4"
 serde_derive = "1.0.195"
 anyhow = "1.0.79"
 getopts = "0.2.21"
-download = { path = "../download" }
+garmin_download = { path = "../garmin_download" }
 upload = { path = "../upload" }
+garmin_client = { path = "../garmin_client" }

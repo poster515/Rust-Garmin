@@ -56,7 +56,7 @@ pub struct OAuth2TokenWrapper {
     refresh_token_expires_at: u64
 }
 
-#[allow(dead_code)]
+// #[allow(dead_code)]
 impl OAuth2TokenWrapper {
     fn update(&mut self) {
         // update our expirations based on current values
@@ -66,14 +66,6 @@ impl OAuth2TokenWrapper {
     }
     pub fn is_expired(&self) -> bool {
         return self.expires_at < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
-    }
-
-    fn is_refresh_expired(&self) -> bool {
-        return self.refresh_token_expires_at < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
-    }
-
-    fn to_string(&self) -> String {
-        format!("{} {}", self.oauth2_token.token_type, self.oauth2_token.access_token)
     }
 }
 

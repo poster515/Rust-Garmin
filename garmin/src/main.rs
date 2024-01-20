@@ -6,7 +6,7 @@ use config::{Config, File, FileFormat};
 
 use getopts::{Options, Matches};
 
-use download::DownloadManager;
+use garmin_download::DownloadManager;
 use upload::UploadManager;
 
 fn build_options() -> Options {

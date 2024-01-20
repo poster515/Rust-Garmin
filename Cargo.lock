@@ -464,29 +464,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
-name = "download"
-version = "0.1.1"
-dependencies = [
- "chrono",
- "config",
- "futures",
- "getopts",
- "log",
- "log4rs",
- "oauth1",
- "regex",
- "reqwest",
- "reqwest-oauth1",
- "serde",
- "serde_derive",
- "serde_json",
- "tokio",
- "url",
- "url-builder",
- "zip",
-]
-
-[[package]]
 name = "either"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -675,12 +652,46 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "config",
- "download",
+ "garmin_client",
+ "garmin_download",
  "getopts",
  "log",
  "log4rs",
  "serde_derive",
  "upload",
+]
+
+[[package]]
+name = "garmin_client"
+version = "0.1.1"
+dependencies = [
+ "chrono",
+ "log",
+ "log4rs",
+ "regex",
+ "reqwest",
+ "reqwest-oauth1",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "url-builder",
+ "zip",
+]
+
+[[package]]
+name = "garmin_download"
+version = "0.1.1"
+dependencies = [
+ "chrono",
+ "config",
+ "garmin_client",
+ "getopts",
+ "log",
+ "log4rs",
+ "serde",
+ "serde_derive",
+ "serde_json",
 ]
 
 [[package]]
@@ -2460,6 +2471,7 @@ checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 name = "upload"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "config",
  "fitparser",

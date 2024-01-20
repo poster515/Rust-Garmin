@@ -28,16 +28,14 @@ const GARMIN_FIT_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
 // Class for downloading health data from Garmin Connect.
 pub struct UploadManager {
     influx_config: InfluxDbConfig,
-    influx_client: Option<Client>,
-    bucket: String
+    influx_client: Option<Client>
 }
 
 impl UploadManager {
     pub fn new(config: Config) -> UploadManager {
         UploadManager {
             influx_config: config.try_deserialize().unwrap(),
-            influx_client: None,
-            bucket: String::new()
+            influx_client: None
         }
     }
 
@@ -82,11 +80,11 @@ impl UploadManager {
             Some(client) => {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 let future = rt.block_on({
-                    client.write(&self.bucket, stream::iter(data))
+                    client.write(&self.influx_config.bucket, stream::iter(data))
                 });
 
                 match future {
-                    Ok(_) => { return true; },
+                    Ok(_) => { info!("Published datapoints!"); return true; },
                     Err(e) => { error!("Unable to write data point(s): {:?}", e); return false; }
                 }
             }, None => {

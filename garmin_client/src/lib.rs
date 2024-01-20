@@ -13,13 +13,21 @@ use zip;
 
 mod auth;
 
+/// Basic set of public functions required to use this client.
 pub trait ClientTraits {
     fn login(&mut self, username: &str, password: &str) -> ();
     fn api_request(&mut self, endpoint: &str) -> ();
 }
 
-// struct that knows how to navigate the auth flow for garmin connect api.
-#[allow(dead_code)]
+/// This struct understands the garmin authentication flow and obtains
+/// an OAuth2.0 access token given a username and password. After 
+/// authenticating, use the api_request() method to obtain various
+/// json and FIT file downloads, and optionally save to file.
+/// 
+/// This client is intended for use with the garmin_download crate, which
+/// is already configured with the various garmin backends, although that
+/// integration is obviously not required to operate this client separately.
+// #[allow(dead_code)]
 pub struct GarminClient {
     client: Client,
     auth_host: String,
@@ -27,7 +35,6 @@ pub struct GarminClient {
     last_sso_resp_text: String,
     last_api_resp_url: String,
     last_api_resp_text: String,
-    user_agent: HashMap<String, String>,
     oauth_manager: auth::GaminOAuthManager
 }
 
@@ -42,7 +49,6 @@ impl GarminClient {
             last_sso_resp_text: String::new(),
             last_api_resp_url: String::new(),
             last_api_resp_text: String::new(),
-            user_agent: HashMap::from([("User-Agent".to_owned(), "com.garmin.android.apps.connectmobile".to_owned())]),
             oauth_manager: auth::GaminOAuthManager::new()
         }
     }
@@ -212,6 +218,9 @@ impl GarminClient {
         String::new()
     }
 
+    /// The first main interface - requires just a username and password,
+    /// and obtains an OAuth2.0 access token. Currently this does not perform
+    /// any session management but will in a coming release.
     pub fn login(&mut self, username: &str, password: &str) -> () {
 
         // set cookies
@@ -264,6 +273,15 @@ impl GarminClient {
         }
     }
 
+    /// After logging in, use this API interface to download data. Some URLs download
+    /// json data, and some download zip files (that are auto-extracted into FIT files here).
+    ///
+    /// Users need to specify the expected data response type via 'json_or_binary' to 
+    /// determine how to process the raw data.
+    ///
+    /// By specifying filepath=None, the data is not saved to file. JSON text responses
+    /// can be retrieved via the get_last_resp_text() method; however binary (i.e., FIT file) 
+    /// downloads are dropped if not saved to file currently.
     pub fn api_request(&mut self, 
             endpoint: &str, 
             params: Option<HashMap<&str, &str>>,
@@ -384,6 +402,8 @@ impl GarminClient {
         }
     }
 
+    /// When specifying a JSON download in the api_request() function, this
+    /// can be called to return that JSON text (use in lieu of saving JSON to file).
     pub fn get_last_resp_text(&self) -> &str {
         &self.last_api_resp_text
     }
