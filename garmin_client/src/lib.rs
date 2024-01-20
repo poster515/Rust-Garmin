@@ -5,13 +5,17 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use log::{error, debug, warn, info};
 use regex::Regex;
 use reqwest::{Client, Response};
 use reqwest::header::HeaderMap;
+use serde_json::{Value};
 use zip;
 
 mod auth;
+
+const SESSION_FILE: &str = ".garmin_session.json";
 
 /// Basic set of public functions required to use this client.
 pub trait ClientTraits {
@@ -222,6 +226,10 @@ impl GarminClient {
     /// and obtains an OAuth2.0 access token. Currently this does not perform
     /// any session management but will in a coming release.
     pub fn login(&mut self, username: &str, password: &str) -> () {
+        // if we have a valid token then continue to use it
+        if self.retrieve_json_session() {
+            return;
+        }
 
         // set cookies
         if !self.set_cookie() {
@@ -253,6 +261,8 @@ impl GarminClient {
 
         let _oauth1 = self.set_oauth1_token(&ticket);
         let _oauth2 = self.set_oauth2_token();
+
+        self.save_json_session();
     }
 
     fn set_oauth1_token(&mut self, ticket: &str) -> bool {
@@ -355,6 +365,9 @@ impl GarminClient {
     }
 
     fn save_as_json(&self, data: &str, filepath: String) {
+        if data.len() == 0{
+            return;
+        }
         match File::create(&filepath) {
             Ok(file) => {
                 let mut writer = BufWriter::new(file);
@@ -373,10 +386,10 @@ impl GarminClient {
 
     fn save_as_binary(&self, mut response: Response, filepath: String){
         // .FIT files are saved as .ZIP files FYI
+        let mut num_chunks = 0;
         match File::create(&filepath) {
             Ok(mut file) => {
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                let mut num_chunks = 0;
                 while let Ok(Some(chunk)) = rt.block_on(response.chunk()) {
                     match file.write(&chunk){
                         Ok(_) => { num_chunks += 1; info!("Wrote chunk #{} to {}. Size: {}", num_chunks, &filepath, &chunk.len()); },
@@ -384,6 +397,10 @@ impl GarminClient {
                     }
                 }
             }, Err(e) => { error!("Unable to create file {}, error: {}", &filepath, e); }
+        }
+        if num_chunks == 0 {
+            warn!("Didn't save any binary zip file data");
+            return;
         }
         // now unzip the downloaded zip
         info!("Attempting to unzip files...");
@@ -399,6 +416,48 @@ impl GarminClient {
             let new_path = Path::new(&filepath).parent().unwrap().join(&file.name());
             info!("Saving FIT file contents: {}", new_path.display());
             fs::write(new_path, &buffer).expect("Unable to write FIT file contents :(");
+        }
+    }
+
+    /// Sets the token and expiration value from a HashMap.
+    ///
+    /// Returns true if valid access_token found
+    fn retrieve_json_session(&mut self) -> bool {
+        match fs::read_to_string(&SESSION_FILE) {
+            Ok(file_contents) => {
+                let map: Value = serde_json::from_str(&file_contents).unwrap();
+                let expires_at_str = map["expires_at"].to_string().replace('"', "");
+                let expiration: u64 = expires_at_str.parse::<u64>().unwrap();
+                if expiration < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() {
+                    return false;
+                }
+                
+                self.oauth_manager.oauth2_token.expires_at = expiration;
+                self.oauth_manager.oauth2_token.oauth2_token.access_token = map["token"].to_string();
+                return true;
+
+            }, Err(e) => { info!("Unable opening garmin_client session file: {}", e); }
+        }
+        false
+    }
+    /// Saves the current access token if valid
+    fn save_json_session(&self) {
+        match File::create(&SESSION_FILE) {
+            Ok(file) => {
+                let mut writer = BufWriter::new(file);
+                let json_data: HashMap<String, String> = HashMap::from([
+                    (String::from("expires_at"), format!("{}", self.oauth_manager.oauth2_token.expires_at)),
+                    (String::from("token"), String::from(&self.oauth_manager.oauth2_token.oauth2_token.access_token))
+                ]);
+                match serde_json::to_writer_pretty(&mut writer, &json_data) {
+                    Ok(_) => {
+                        match writer.flush() {
+                            Ok(_) => { }, 
+                            Err(e) => { error!("Error flushing writer: {}", e); }
+                        }
+                    }, Err(e) => { error!("Error writing json to buffer: {}", e); }
+                }
+            }, Err(e) => { error!("Unable to create file {}, error: {}", SESSION_FILE, e); }
         }
     }
 

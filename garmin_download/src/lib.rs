@@ -149,7 +149,13 @@ impl DownloadManager {
         // response will contain displayName and fullName
         self.garmin_client.api_request(&self.garmin_user_profile_url, None, true, None);
 
-        let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
+        let response_text = &self.garmin_client.get_last_resp_text();
+        if response_text.len() == 0 {
+            warn!("Got empty response from API");
+            return;
+        }
+
+        let lookup: HashMap<String, serde_json::Value> = serde_json::from_str(response_text).unwrap();
 
         if lookup.contains_key("displayName"){
             self.display_name = lookup["displayName"].to_string().replace('"', "");
@@ -214,8 +220,14 @@ impl DownloadManager {
             return
         }
 
+        let response_text = &self.garmin_client.get_last_resp_text();
+        if response_text.len() == 0 {
+            warn!("Got empty response from API");
+            return;
+        }
+
         // deserialize into struct
-        self.personal_info = serde_json::from_str(self.garmin_client.get_last_resp_text()).unwrap();
+        self.personal_info = serde_json::from_str(response_text).unwrap();
         info!("Got personal info. \nuserId: {}\nbirthday: {}\nemail: {}\nage: {}",
             &self.personal_info.biometricProfile.userId,
             &self.personal_info.userInfo.birthDate,
@@ -248,7 +260,13 @@ impl DownloadManager {
         ]);
         self.garmin_client.api_request(&endpoint, Some(params), true, None);
 
-        let lookup: Vec<serde_json::Value> = serde_json::from_str(&self.garmin_client.get_last_resp_text()).unwrap();
+        let response_text = &self.garmin_client.get_last_resp_text();
+        if response_text.len() == 0 {
+            warn!("Got empty response from API");
+            return;
+        }
+
+        let lookup: Vec<serde_json::Value> = serde_json::from_str(response_text).unwrap();
 
         for activity in lookup {
             let id = &activity["activityId"];

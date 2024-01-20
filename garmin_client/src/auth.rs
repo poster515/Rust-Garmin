@@ -52,7 +52,7 @@ pub struct OAuth2Token {
 #[derive(Default)]
 pub struct OAuth2TokenWrapper {
     pub oauth2_token: OAuth2Token,
-    expires_at: u64,
+    pub expires_at: u64,
     refresh_token_expires_at: u64
 }
 

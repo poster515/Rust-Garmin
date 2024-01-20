@@ -95,8 +95,8 @@ fn main() -> Result<(), Error> {
     if matches.opt_present("disable_download") {
         info!("Not downloading any garmin data");
     } else {
-        let _handle = Config::builder().add_source(File::new(cwd.join("config").join("garmin_config.json").to_str().unwrap(), FileFormat::Json)).build();
-        match _handle {
+        let handle = Config::builder().add_source(File::new(cwd.join("config").join("garmin_config.json").to_str().unwrap(), FileFormat::Json)).build();
+        match handle {
             Ok(config) => {
                 info!("Successfully loaded garmin config! Executing any configured downloads...");
                 
@@ -116,8 +116,8 @@ fn main() -> Result<(), Error> {
     if matches.opt_present("disable_upload") {
         info!("Not uploading any garmin data");
     } else {
-        let _handle = Config::builder().add_source(File::new(cwd.join("config").join("influxdb_config.json").to_str().unwrap(), FileFormat::Json)).build();
-        match _handle {
+        let handle = Config::builder().add_source(File::new(cwd.join("config").join("influxdb_config.json").to_str().unwrap(), FileFormat::Json)).build();
+        match handle {
             Ok(config) => {
                 info!("Successfully loaded influx config!");
                 
