@@ -22,6 +22,20 @@ All downloads are placed in subfolders within the file_base_path (e.g., "sleep",
 
 Downloads can be disabled entirely by passing --disable_downloads as an input argument.
 
+Note that 'download_data_today' is a sort of universal override - it will ONLY download today's data for everything. Even if you specify a date override on the command line, that will be ignored if download_today_data is set to true. With that said, here are CLI overrides for various metrics with download_today_data set to false:
+```
+    -u, --summary_date use YYY-MM-DD format
+                        download date for summary data
+    -w, --weight_date use YYY-MM-DD format
+                        download date for weight data
+    -s, --sleep_date use YYY-MM-DD format
+                        download date for sleep data
+    -r, --resting_heart_date use YYY-MM-DD format
+                        download date for resting heart rate data
+    -m, --monitor_date use YYY-MM-DD format
+                        download date for monitoring data
+```
+
 #### Upload Behavior
 Right now the intended target is an influxdb server, although this repo should be expanded to target more destinations. Configure the influxDB client via config/influxdb_config.json.
 

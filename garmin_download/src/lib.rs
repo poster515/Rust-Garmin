@@ -65,7 +65,7 @@ impl DownloadManager {
     ///     &nbsp;&nbsp;&nbsp;&nbsp;"s": "YYY-MM-DD" -> overrides the download date for sleeep info (JSON)<br />
     ///     &nbsp;&nbsp;&nbsp;&nbsp;"r": "YYY-MM-DD" -> overrides the download date for heart_rate info (JSON)<br />
     ///     &nbsp;&nbsp;&nbsp;&nbsp;"m": "YYY-MM-DD" -> overrides the download date for monitoring data (FIT file)<br />
-    pub fn new(config: Config, options: Matches) -> DownloadManager {
+    pub fn new(config: Config, options: Option<Matches>) -> DownloadManager {
         let mut dm = DownloadManager {
             garmin_connect_user_profile_url: String::from("userprofile-service/userprofile"),
 
@@ -92,26 +92,29 @@ impl DownloadManager {
             full_name: String::new(),
             display_name: String::new()
         };
-        // go through options and override anything user specified in CL args
-        match options.opt_get::<String>("u") {
-            Ok(date) => { match date { Some(d) => { dm.garmin_config.data.summary_date = d;}, None => {}}}, 
-            Err(_) => {}
-        }
-        match options.opt_get::<String>("w") {
-            Ok(date) => { match date { Some(d) => { dm.garmin_config.data.weight_start_date = d;}, None => {}}}, 
-            Err(_) => {}
-        }
-        match options.opt_get::<String>("s") {
-            Ok(date) => { match date { Some(d) => { dm.garmin_config.data.sleep_start_date = d;}, None => {}}}, 
-            Err(_) => {}
-        }
-        match options.opt_get::<String>("r") {
-            Ok(date) => { match date { Some(d) => { dm.garmin_config.data.rhr_start_date = d;}, None => {}}}, 
-            Err(_) => {}
-        }
-        match options.opt_get::<String>("m") {
-            Ok(date) => { match date { Some(d) => { dm.garmin_config.data.monitoring_start_date = d;}, None => {}}}, 
-            Err(_) => {}
+
+        if let Some(options) = options {
+            // go through options and override anything user specified in CL args
+            match options.opt_get::<String>("u") {
+                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.summary_date = d;}, None => {}}}, 
+                Err(_) => {}
+            }
+            match options.opt_get::<String>("w") {
+                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.weight_start_date = d;}, None => {}}}, 
+                Err(_) => {}
+            }
+            match options.opt_get::<String>("s") {
+                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.sleep_start_date = d;}, None => {}}}, 
+                Err(_) => {}
+            }
+            match options.opt_get::<String>("r") {
+                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.rhr_start_date = d;}, None => {}}}, 
+                Err(_) => {}
+            }
+            match options.opt_get::<String>("m") {
+                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.monitoring_start_date = d;}, None => {}}}, 
+                Err(_) => {}
+            }
         }
         dm
     }

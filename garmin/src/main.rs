@@ -101,7 +101,7 @@ fn main() -> Result<(), Error> {
                 info!("Successfully loaded garmin config! Executing any configured downloads...");
                 
                 // login and download all configured stats
-                let mut download_manager = DownloadManager::new(config, matches.clone());
+                let mut download_manager = DownloadManager::new(config, Some(matches.clone()));
                 download_manager.login();
                 download_manager.download_all();
             },
