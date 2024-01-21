@@ -180,7 +180,6 @@ impl GaminOAuthManager {
         headers.insert("User-Agent", "com.garmin.android.apps.connectmobile".parse().unwrap());
         headers.insert("Content-Type", "application/x-www-form-urlencoded".parse().unwrap());
 
-        // TODO: handle MFA at some point
         // TODO: add timeout at some point
 
         let secrets = reqwest_oauth1::Secrets::new(String::from(&self.consumer_info.consumer_key), String::from(&self.consumer_info.consumer_secret))
@@ -199,7 +198,6 @@ impl GaminOAuthManager {
                 let text_future = rt.block_on(resp.text());
                 match text_future {
                     Ok(s) => {
-                        debug!("Got oauth2.0 response body: {}", s);
                         self.oauth2_token.oauth2_token = serde_json::from_str(&s).unwrap();
                         self.oauth2_token.update();
                         info!("OAuth2.0 refresh expires in {} secs", self.oauth2_token.oauth2_token.expires_in);

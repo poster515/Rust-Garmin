@@ -4,6 +4,7 @@ use std::cmp::min;
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::io::{stdin, stdout};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use log::{error, debug, warn, info};
@@ -57,16 +58,18 @@ impl GarminClient {
         }
     }
 
-    fn build_singin_url(&self) -> String {
+    fn build_auth_url(&self, routes: Vec<&str>) -> String {
         let mut sso_embed = String::from(&self.auth_host);
         sso_embed.push_str("/embed");
 
         let mut ub = url_builder::URLBuilder::new();
-        ub.set_protocol("https")
-            .set_host("sso.garmin.com")
-            .add_route("sso")
-            .add_route("signin")
-            .add_param("id", "gauth-widget")
+        ub.set_protocol("https").set_host("sso.garmin.com");
+
+        for route in routes {
+            ub.add_route(route);
+        }
+
+        ub.add_param("id", "gauth-widget")
             .add_param("embedWidget", "true")
             .add_param("gauthHost", &sso_embed[..])
             .add_param("service", &sso_embed[..])
@@ -119,9 +122,9 @@ impl GarminClient {
         true
     }
 
-    fn get_csrf_token(&mut self) -> bool {
+    fn get_csrf_token(&mut self) -> String {
 
-        let url = self.build_singin_url();
+        let url = self.build_auth_url(vec!["sso", "signin"]);
         let mut headers = HeaderMap::new();
         headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
 
@@ -133,16 +136,14 @@ impl GarminClient {
         let response = future.unwrap();
         self.last_sso_resp_url = response.url().to_string();
 
-        let get_body_future = rt.block_on({
-            response.text()
-        });
+        let get_body_future = rt.block_on(response.text());
 
         self.last_sso_resp_text = get_body_future.unwrap();
-        true
+        self.parse_csrf_token(&self.last_sso_resp_text)
     }
 
     fn submit_login(&mut self, username: &str, password: &str, csrf_token: &str) -> bool {
-        let url = self.build_singin_url();
+        let url = self.build_auth_url(vec!["sso", "signin"]);
         let mut headers = HeaderMap::new(); 
         headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
 
@@ -223,8 +224,7 @@ impl GarminClient {
     }
 
     /// The first main interface - requires just a username and password,
-    /// and obtains an OAuth2.0 access token. Currently this does not perform
-    /// any session management but will in a coming release.
+    /// and obtains an OAuth2.0 access token.
     pub fn login(&mut self, username: &str, password: &str) -> () {
         // if we have a valid token then continue to use it
         if self.retrieve_json_session() {
@@ -237,11 +237,7 @@ impl GarminClient {
         }
 
         // get csrf token
-        if !self.get_csrf_token() {
-            return
-        }
-        
-        let csrf_token: String = self.parse_csrf_token(&self.last_sso_resp_text);
+        let csrf_token: String = self.get_csrf_token();
         
         if csrf_token.len() == 0 {
             return
@@ -249,9 +245,20 @@ impl GarminClient {
 
         // Submit login form with email and password
         self.submit_login(username, password, &csrf_token);
-        let title = self.parse_title(&self.last_sso_resp_text);
+        let mut title = self.parse_title(&self.last_sso_resp_text);
         if title.len() == 0 {
             return
+        }
+
+        // handle any MFA for user
+        if title.contains("MFA") {
+            self.handle_mfa();
+            title = self.parse_title(&self.last_sso_resp_text);
+        }
+
+        if title != "Success" {
+            error!("Unable to authenticate user!");
+            return;
         }
 
         let ticket = self.parse_ticket(&self.last_sso_resp_text);
@@ -263,6 +270,40 @@ impl GarminClient {
         let _oauth2 = self.set_oauth2_token();
 
         self.save_json_session();
+    }
+
+    fn handle_mfa(&mut self) {
+        let csrf_token: String = self.get_csrf_token();
+
+        let mut mfa_code = String::new();
+        print!("Enter MFA code: ");
+        let _ = stdout().flush();
+        stdin().read_line(&mut mfa_code).expect("Did not enter a correct string");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
+
+        let form = HashMap::from([
+            ("mfa-code", String::from(mfa_code)),
+            ("fromPage", String::from("setupEnterMfaCode")),
+            ("embed", String::from("true")),
+            ("_csrf", String::from(csrf_token))
+        ]);
+
+        let url = self.build_auth_url(vec!["sso", "verifyMFA", "loginEnterMfaCode"]);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let future = rt.block_on({
+            self.client.post(&url)
+                .headers(headers)
+                .form(&form)
+                .send()
+        });
+
+        let response = future.unwrap();
+        self.last_sso_resp_url = response.url().to_string();
+
+        let get_body_future = rt.block_on(response.text());
+        self.last_sso_resp_text = get_body_future.unwrap();
     }
 
     fn set_oauth1_token(&mut self, ticket: &str) -> bool {
@@ -309,9 +350,7 @@ impl GarminClient {
 
         let access_token: String = String::from(&self.oauth_manager.get_oauth2_token().oauth2_token.access_token);
 
-        debug!("====================================================");
         debug!("ConnectAPI requesting from: {}", &url);
-        debug!("====================================================");
 
         let mut headers = HeaderMap::new();
         headers.insert("Authorization", format!("Bearer {}", access_token).parse().unwrap());
@@ -429,9 +468,10 @@ impl GarminClient {
                 let expires_at_str = map["expires_at"].to_string().replace('"', "");
                 let expiration: u64 = expires_at_str.parse::<u64>().unwrap();
                 if expiration < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() {
+                    warn!("Found garmin session token, but it expired. Need to re-authenticate");
                     return false;
                 }
-                
+                info!("Successfully read garmin session token!");
                 self.oauth_manager.oauth2_token.expires_at = expiration;
                 self.oauth_manager.oauth2_token.oauth2_token.access_token = map["token"].to_string();
                 return true;

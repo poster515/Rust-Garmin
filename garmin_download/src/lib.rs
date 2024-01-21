@@ -151,7 +151,7 @@ impl DownloadManager {
 
         let response_text = &self.garmin_client.get_last_resp_text();
         if response_text.len() == 0 {
-            warn!("Got empty response from API");
+            warn!("Got empty response from API, unable to get user profile");
             return;
         }
 
@@ -188,6 +188,7 @@ impl DownloadManager {
         // should be used by all date-getters to 1) see if we're 
         // overriding to today and 2) make sure the format is correct if not
         if self.garmin_config.data.download_today_data {
+            info!("download_today_data set - ignoring any config or command line dates");
             return Local::now().naive_local();
         }
         let mut temp_date: String = String::from(default_date);
@@ -222,7 +223,7 @@ impl DownloadManager {
 
         let response_text = &self.garmin_client.get_last_resp_text();
         if response_text.len() == 0 {
-            warn!("Got empty response from API");
+            warn!("Got empty response from API, unable to get personal info");
             return;
         }
 
@@ -262,7 +263,7 @@ impl DownloadManager {
 
         let response_text = &self.garmin_client.get_last_resp_text();
         if response_text.len() == 0 {
-            warn!("Got empty response from API");
+            warn!("Got empty response from API, unable to get summaries for last {} activities", activity_count);
             return;
         }
 
@@ -490,10 +491,10 @@ impl DownloadManager {
                 info!("File: {} exists, but overwrite is disabled, ignoring", path.display());
                 return None;
             } else {
-                info!("File: {} exists, overwriting...", path.display());
+                info!("File: {} exists, overwriting with any received data...", path.display());
             }
         } else {
-            info!("Saving file: {}", path.display())
+            info!("Saving any received data to file: {}", path.display())
         }
         Some(path.to_str().unwrap().to_string())
     }

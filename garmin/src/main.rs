@@ -81,8 +81,8 @@ fn main() -> Result<(), Error> {
 
     println!("Current executable path: {:?}", file_path);
 
-    let _handle = log4rs::init_file(cwd.join("config").join("log4rs.yml"), Default::default());
-    match _handle {
+    let handle = log4rs::init_file(cwd.join("config").join("log4rs.yml"), Default::default());
+    match handle {
         Ok(()) => {
             info!("Successfully loaded log config!");
         },
