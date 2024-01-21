@@ -40,7 +40,8 @@ pub struct GarminClient {
     last_sso_resp_text: String,
     last_api_resp_url: String,
     last_api_resp_text: String,
-    oauth_manager: auth::GaminOAuthManager
+    oauth_manager: auth::GaminOAuthManager,
+    runtime: tokio::runtime::Runtime
 }
 
 impl GarminClient {
@@ -54,7 +55,8 @@ impl GarminClient {
             last_sso_resp_text: String::new(),
             last_api_resp_url: String::new(),
             last_api_resp_text: String::new(),
-            oauth_manager: auth::GaminOAuthManager::new()
+            oauth_manager: auth::GaminOAuthManager::new(),
+            runtime: tokio::runtime::Runtime::new().unwrap()
         }
     }
 
@@ -106,18 +108,12 @@ impl GarminClient {
         debug!("Requesting url: {}", url);
         debug!("====================================================");
 
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let future = rt.block_on({
-            self.client.get(&url).send()
-        });
+        let future = self.runtime.block_on(self.client.get(&url).send());
 
         let response = future.unwrap();
         self.last_sso_resp_url = response.url().to_string();
 
-        let get_body_future = rt.block_on({
-            response.text()
-        });
-
+        let get_body_future = self.runtime.block_on(response.text());
         self.last_sso_resp_text = get_body_future.unwrap();
         true
     }
@@ -128,15 +124,12 @@ impl GarminClient {
         let mut headers = HeaderMap::new();
         headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
 
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let future = rt.block_on({
-            self.client.get(&url).headers(headers).send()
-        });
+        let future = self.runtime.block_on(self.client.get(&url).headers(headers).send());
 
         let response = future.unwrap();
         self.last_sso_resp_url = response.url().to_string();
 
-        let get_body_future = rt.block_on(response.text());
+        let get_body_future = self.runtime.block_on(response.text());
 
         self.last_sso_resp_text = get_body_future.unwrap();
         self.parse_csrf_token(&self.last_sso_resp_text)
@@ -154,8 +147,7 @@ impl GarminClient {
             ("_csrf", String::from(csrf_token))
         ]);
 
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let future = rt.block_on({
+        let future = self.runtime.block_on({
             self.client.post(&url)
                 .headers(headers)
                 .form(&form)
@@ -165,10 +157,7 @@ impl GarminClient {
         let response = future.unwrap();
         self.last_sso_resp_url = response.url().to_string();
 
-        let get_body_future = rt.block_on({
-            response.text()
-        });
-
+        let get_body_future = self.runtime.block_on(response.text());
         self.last_sso_resp_text = get_body_future.unwrap();
         true
     }
@@ -193,12 +182,14 @@ impl GarminClient {
 
             debug!("====================================================");
             if title == "Success" {
-                debug!("Got successful login!");
+                info!("Got successful login!");
                 return String::from(title);
             } else if title == "GARMIN Authentication Application" {
+                // testing shows that this title is received with incorrect credentials.
                 error!("Got unsuccessful login :( check your credentials?");
             } else {
-                warn!("Unsure how to process login response {}", title);
+                // could possibly have MFA requirement, just return it
+                return String::from(title);
             }
             debug!("====================================================");
         }
@@ -233,6 +224,7 @@ impl GarminClient {
 
         // set cookies
         if !self.set_cookie() {
+            error!("Unable to set session, cannot proceed with authentication");
             return
         }
 
@@ -240,6 +232,7 @@ impl GarminClient {
         let csrf_token: String = self.get_csrf_token();
         
         if csrf_token.len() == 0 {
+            error!("Unable to find CSRF token in response: {}", &self.last_sso_resp_text);
             return
         }
 
@@ -247,6 +240,7 @@ impl GarminClient {
         self.submit_login(username, password, &csrf_token);
         let mut title = self.parse_title(&self.last_sso_resp_text);
         if title.len() == 0 {
+            error!("Unable to find 'title' field in response: {}", &self.last_sso_resp_text);
             return
         }
 
@@ -266,9 +260,10 @@ impl GarminClient {
             return;
         }
 
-        let _oauth1 = self.set_oauth1_token(&ticket);
-        let _oauth2 = self.set_oauth2_token();
-
+        self.set_oauth1_token(&ticket);
+        if !(self.set_oauth2_token()){
+            return;
+        }
         self.save_json_session();
     }
 
@@ -291,8 +286,7 @@ impl GarminClient {
         ]);
 
         let url = self.build_auth_url(vec!["sso", "verifyMFA", "loginEnterMfaCode"]);
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let future = rt.block_on({
+        let future = self.runtime.block_on({
             self.client.post(&url)
                 .headers(headers)
                 .form(&form)
@@ -302,14 +296,13 @@ impl GarminClient {
         let response = future.unwrap();
         self.last_sso_resp_url = response.url().to_string();
 
-        let get_body_future = rt.block_on(response.text());
+        let get_body_future = self.runtime.block_on(response.text());
         self.last_sso_resp_text = get_body_future.unwrap();
     }
 
-    fn set_oauth1_token(&mut self, ticket: &str) -> bool {
+    fn set_oauth1_token(&mut self, ticket: &str) {
         let oauth1_token: String = self.oauth_manager.set_oauth1_token(ticket, self.client.clone()).unwrap();
         info!("Got oauth1 token: {}", oauth1_token);
-        true
     }
 
     fn set_oauth2_token(&mut self) -> bool {
@@ -355,8 +348,7 @@ impl GarminClient {
         let mut headers = HeaderMap::new();
         headers.insert("Authorization", format!("Bearer {}", access_token).parse().unwrap());
 
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let future = rt.block_on({
+        let future = self.runtime.block_on({
             let builder = self.client.get(url).headers(headers);
 
             match params {
@@ -373,7 +365,7 @@ impl GarminClient {
             Ok(response) => {
                 if json_or_binary {
                     self.last_api_resp_url = response.url().to_string();
-                    let get_body_future = rt.block_on({
+                    let get_body_future = self.runtime.block_on({
                         response.text()
                     });
 
@@ -428,8 +420,7 @@ impl GarminClient {
         let mut num_chunks = 0;
         match File::create(&filepath) {
             Ok(mut file) => {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                while let Ok(Some(chunk)) = rt.block_on(response.chunk()) {
+                while let Ok(Some(chunk)) = self.runtime.block_on(response.chunk()) {
                     match file.write(&chunk){
                         Ok(_) => { num_chunks += 1; info!("Wrote chunk #{} to {}. Size: {}", num_chunks, &filepath, &chunk.len()); },
                         Err(e) => { error!("Error writing chunk #{} to {}, error: {}", num_chunks, &filepath, e); }
