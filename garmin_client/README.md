@@ -29,3 +29,7 @@ fn main() {
     client.api_request(endpoint, Some(params), is_json_result, filename);
 }
 ```
+
+Recommend using garmin_download crate for more programmatic control, and otherwise demonstration of how to format various other API endpoints.
+
+Note: this client uses basic session management to store session tokens. However, heuristics show that only one endpoint download is allowed for a given session. Therefore to redownload the same file you'll need to delete the .garmin_session.json file saved after first logging in.
