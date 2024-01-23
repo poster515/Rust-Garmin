@@ -46,8 +46,6 @@ pub struct DownloadManager {
 
     garmin_user_profile_url: String,
 
-    download_days_overlap: u32,
-
     garmin_client: GarminClient,
     garmin_config: GarminConfig,
     personal_info: PersonalInfo,
@@ -65,6 +63,9 @@ impl DownloadManager {
     ///     &nbsp;&nbsp;&nbsp;&nbsp;"s": "YYY-MM-DD" -> overrides the download date for sleeep info (JSON)<br />
     ///     &nbsp;&nbsp;&nbsp;&nbsp;"r": "YYY-MM-DD" -> overrides the download date for heart_rate info (JSON)<br />
     ///     &nbsp;&nbsp;&nbsp;&nbsp;"m": "YYY-MM-DD" -> overrides the download date for monitoring data (FIT file)<br />
+    /// 
+    /// Each API call saves the response url and text in case users want more info from the call. These are saved after
+    /// the most recent call (i.e., no API response 'history' included) and overwritten with each call. 
     pub fn new(config: Config, options: Option<Matches>) -> DownloadManager {
         let mut dm = DownloadManager {
             garmin_connect_user_profile_url: String::from("userprofile-service/userprofile"),
@@ -85,7 +86,6 @@ impl DownloadManager {
 
             garmin_user_profile_url: String::from("userprofile-service/socialProfile"),
 
-            download_days_overlap: 3,  // Existing donloaded data will be redownloaded and overwritten if it is within this number of days of now.
             garmin_client: GarminClient::new(),
             garmin_config: config.try_deserialize().unwrap(),
             personal_info: Default::default(),
@@ -95,25 +95,23 @@ impl DownloadManager {
 
         if let Some(options) = options {
             // go through options and override anything user specified in CL args
-            match options.opt_get::<String>("u") {
-                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.summary_date = d;}, None => {}}}, 
-                Err(_) => {}
+            if let Ok(Some(date)) = options.opt_get::<String>("u") {
+                dm.garmin_config.data.summary_date = date; 
             }
-            match options.opt_get::<String>("w") {
-                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.weight_start_date = d;}, None => {}}}, 
-                Err(_) => {}
+            if let Ok(Some(date)) = options.opt_get::<String>("w") {
+                dm.garmin_config.data.weight_start_date = date;
             }
-            match options.opt_get::<String>("s") {
-                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.sleep_start_date = d;}, None => {}}}, 
-                Err(_) => {}
+            if let Ok(Some(date)) = options.opt_get::<String>("s") {
+                dm.garmin_config.data.sleep_start_date = date;
             }
-            match options.opt_get::<String>("r") {
-                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.rhr_start_date = d;}, None => {}}}, 
-                Err(_) => {}
+            if let Ok(Some(date)) = options.opt_get::<String>("r") {
+                dm.garmin_config.data.rhr_start_date = date;
             }
-            match options.opt_get::<String>("m") {
-                Ok(date) => { match date { Some(d) => { dm.garmin_config.data.monitoring_start_date = d;}, None => {}}}, 
-                Err(_) => {}
+            if let Ok(Some(date)) = options.opt_get::<String>("o") {
+                dm.garmin_config.data.hydration_start_date = date;
+            }
+            if let Ok(Some(date)) = options.opt_get::<String>("m") {
+                dm.garmin_config.data.monitoring_start_date = date;
             }
         }
         dm
@@ -145,14 +143,18 @@ impl DownloadManager {
         }
     }
 
+    pub fn get_last_resp_text(&self) -> &str {
+        &self.garmin_client.get_last_resp_text()
+    }
+
     /// Retrives user profile, which includes fields like displayName and fullName.
     ///
-    /// User can retrieve full text via
+    /// User can retrieve full response text via self.get_last_resp_text() if needed.
     pub fn get_user_profile(&mut self){
         // response will contain displayName and fullName
         self.garmin_client.api_request(&self.garmin_user_profile_url, None, true, None);
 
-        let response_text = &self.garmin_client.get_last_resp_text();
+        let response_text = self.get_last_resp_text();
         if response_text.len() == 0 {
             warn!("Got empty response from API, unable to get user profile");
             return;
@@ -187,7 +189,7 @@ impl DownloadManager {
         return String::from(&self.full_name);
     }
 
-    fn get_download_date(&self, default_date: &str) -> NaiveDateTime{
+    fn get_download_date(&self, default_date: &str) -> NaiveDateTime {
         // should be used by all date-getters to 1) see if we're 
         // overriding to today and 2) make sure the format is correct if not
         if self.garmin_config.data.download_today_data {
@@ -203,7 +205,7 @@ impl DownloadManager {
         }
     }
 
-    /// Logins in using the configured username and password.
+    /// Logs in using the configured username and password.
     pub fn login(&mut self) {
         // connect to domain using login url
         let username: &str = &self.garmin_config.credentials.user;
@@ -224,7 +226,7 @@ impl DownloadManager {
             return
         }
 
-        let response_text = &self.garmin_client.get_last_resp_text();
+        let response_text = self.get_last_resp_text();
         if response_text.len() == 0 {
             warn!("Got empty response from API, unable to get personal info");
             return;
@@ -264,7 +266,7 @@ impl DownloadManager {
         ]);
         self.garmin_client.api_request(&endpoint, Some(params), true, None);
 
-        let response_text = &self.garmin_client.get_last_resp_text();
+        let response_text = self.get_last_resp_text();
         if response_text.len() == 0 {
             warn!("Got empty response from API, unable to get summaries for last {} activities", activity_count);
             return;
@@ -425,7 +427,7 @@ impl DownloadManager {
 
      /// Downloads hydration info as JSON file, for the configured date.
     pub fn get_hydration(&mut self) {
-        let date = self.get_download_date(&self.garmin_config.data.hydration_date);
+        let date = self.get_download_date(&self.garmin_config.data.hydration_start_date);
         let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
 
         let mut endpoint = String::from(&self.garmin_connect_daily_hydration_url);
@@ -465,25 +467,21 @@ impl DownloadManager {
 
         let base_path = String::from(&self.garmin_config.file.file_base_path);
 
-        let file_date: String;
+        let mut filename: String;
         match activity_date {
             Some(d) => {
-                file_date = format!("{}", d.format(&self.garmin_config.file.file_date_format));
+                filename = format!("{}", d.format(&self.garmin_config.file.file_date_format)).replace('"', "");
             }
             None => {
-                file_date = format!("{}", Local::now().format(&self.garmin_config.file.file_date_format));
+                filename = format!("{}", Local::now().format(&self.garmin_config.file.file_date_format)).replace('"', "");
             }
         }
 
-        let mut filename: String = String::from(format!("{}", file_date.replace('"', "")));
-        
-        match filename_addons {
-            Some(s) => {
-                for ext in s {
-                    filename.push_str("-");
-                    filename.push_str(&ext);
-                }
-            }, None => {}
+        if let Some(s) = filename_addons {
+            for addon in s {
+                filename.push_str("-");
+                filename.push_str(&addon);
+            }
         }
 
         filename.push_str(extension);

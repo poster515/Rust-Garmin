@@ -7,5 +7,7 @@ pub struct InfluxDbConfig {
     pub org: String,
     pub bucket: String,
     pub token: String,
-    pub file_base_path: String
+    pub file_base_path: String,
+    pub upload_json_files : bool,
+    pub upload_fit_files  : bool
 }

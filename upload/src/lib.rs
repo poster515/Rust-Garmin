@@ -40,12 +40,22 @@ impl UploadManager {
     }
 
     pub fn upload_all(&mut self) {
-        self.upload_activity_info();
-        self.upload_heart_rate_data();
-        self.upload_summary_data();
-        self.upload_weight_data();
-        self.upload_sleep();
-        self.upload_monitoring();
+        if self.influx_config.upload_json_files {
+            self.upload_activity_info();
+            self.upload_heart_rate_data();
+            self.upload_summary_data();
+            self.upload_weight_data();
+            self.upload_sleep();
+        } else {
+            info!("Ignoring JSON file uploads");
+        }
+
+        if self.influx_config.upload_fit_files {
+            self.upload_monitoring();
+            self.upload_activity_details();
+        } else {
+            info!("Ignoring FIT file uploads");
+        }
     }
 
     fn garmin_ts_to_nanos_since_epoch(&self, ts: &str) -> i64 {
@@ -68,11 +78,13 @@ impl UploadManager {
             Ok(client) => {
                 info!("Built influx client: {:?}", client);
                 self.influx_client = Some(client);
-                return true;
-            }, 
-            Err(e) => { error!("Unable to create client with:\nurl: {}\norg: {}\ntoken: {}\nerror: {}", url, org, token, e); }
+                true
+            },
+            Err(e) => { 
+                error!("Unable to create client with:\nurl: {}\norg: {}\ntoken: {}\nerror: {}", url, org, token, e); 
+                false
+            }
         }
-        false
     }
 
     fn write_data(&mut self, data: Vec<DataPoint>) -> bool {
@@ -103,6 +115,7 @@ impl UploadManager {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("activities");
         if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
             return;
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
@@ -145,7 +158,21 @@ impl UploadManager {
 
                         }, Err(e) => { error!("Failed to open file {:?}, error: {}", entry.path(), e); }
                     }
-                } else if self.get_extension_from_filename(&filename) == Some("fit") {
+                }
+            }
+        }
+    }
+    fn upload_activity_details(&mut self) {
+        let base_path = String::from(&self.influx_config.file_base_path);
+        let folder = Path::new(&base_path).join("activities");
+        if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
+            return;
+        }
+        for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
+            if let Ok(entry) = entry {
+                let filename: String = String::from(entry.path().to_str().unwrap());
+                if self.get_extension_from_filename(&filename) == Some("fit") {
                     // we could use the below mapping to filter out fields for certain record kinds,
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
@@ -179,6 +206,7 @@ impl UploadManager {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("sleep");
         if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
             return;
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
@@ -202,6 +230,7 @@ impl UploadManager {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("heartrate");
         if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
             return;
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
@@ -214,6 +243,7 @@ impl UploadManager {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("weight");
         if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
             return;
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
@@ -226,6 +256,7 @@ impl UploadManager {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("day_summary");
         if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
             return;
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
@@ -239,6 +270,7 @@ impl UploadManager {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("monitoring");
         if !folder.exists() {
+            warn!("Folder {} does not exist!", folder.display());
             return;
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
@@ -294,10 +326,7 @@ impl UploadManager {
             if !records_of_interest.contains(kind) { continue; }
 
             let mut data = DataPoint::builder(measurement);
-            match tags {
-                Some(ref t) => { for (tag, value) in t { data = data.tag(tag, value); }},
-                None => {}
-            }
+            if let Some(ref t) = tags { for (tag, value) in t { data = data.tag(tag, value); }}
 
             for field in record.into_vec() {
                 if field.name() == "timestamp" {

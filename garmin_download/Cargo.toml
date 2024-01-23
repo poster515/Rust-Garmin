@@ -1,6 +1,6 @@
 [package]
 name = "garmin_download"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "GPL-3.0"
 description = "Provides a DownloadManager struct capable of downloading data directly from Garmin"

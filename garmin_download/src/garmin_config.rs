@@ -20,7 +20,7 @@ pub struct DataConfig {
     pub sleep_start_date: String,
     pub rhr_start_date: String,
     pub monitoring_start_date: String,
-    pub hydration_date: String,
+    pub hydration_start_date: String,
     pub download_today_data: bool,
 }
 

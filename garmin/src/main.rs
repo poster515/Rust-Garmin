@@ -33,6 +33,11 @@ fn build_options() -> Options {
         "download date for resting heart rate data",
         "use YYY-MM-DD format");
 
+    options.optopt("o",
+        "hydration_date",
+        "download date for hydration data",
+        "use YYY-MM-DD format");
+
     options.optopt("m",
         "monitor_date",
         "download date for monitoring data",
