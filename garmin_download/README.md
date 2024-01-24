@@ -33,7 +33,7 @@ Note that 'download_data_today' in the config is a sort of universal override - 
                         download date for resting heart rate data
     -m, --monitor_date use YYY-MM-DD format
                         download date for monitoring data
-    -m, --hydration_date use YYY-MM-DD format
+    -o, --hydration_date use YYY-MM-DD format
                         download date for hydration data
 ```
 

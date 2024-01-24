@@ -5,11 +5,11 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::ffi::OsStr;
-use chrono::{Local, NaiveDateTime};
+use chrono::{Local, NaiveDateTime, DateTime};
 
 use futures::stream;
 use config::Config;
-use log::{info, error, warn};
+use log::{info, error, warn, debug};
 use influxdb2::{Client, ClientBuilder};
 use influxdb2::models::data_point::DataPoint;
 use regex::Regex;
@@ -176,9 +176,8 @@ impl UploadManager {
                     // we could use the below mapping to filter out fields for certain record kinds,
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
-                    let records_of_interest: HashSet<&str> = HashSet::from(["record", "session", "time_in_zone"]);
                     let id = self.get_activity_id_from_filename(&filename);
-                    self.parse_fit_file(&filename, "activity", records_of_interest, Some(vec![("id".to_string(), id)]));
+                    self.parse_fit_file(&filename, "activity", Some(vec![("id".to_string(), id)]));
                 }
             }
         }
@@ -280,10 +279,8 @@ impl UploadManager {
                     // we could use the below mapping to filter out fields for certain record kinds,
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_monitoring_map();
-                    let records_of_interest: HashSet<&str> = HashSet::from(["sleep_level", "sleep_assessment", "hrv_status_summary", "hrv_value", "respiration_rate", "monitoring_hr_data", "monitoring_info"]);
-
                     let monitoring_metric = self.get_monitoring_metric_from_filename(&filename);
-                    self.parse_fit_file(&filename, "monitoring", records_of_interest, Some(vec![("metric".to_string(), monitoring_metric)]));
+                    self.parse_fit_file(&filename, "monitoring", Some(vec![("metric".to_string(), monitoring_metric)]));
                 }
             }
         }
@@ -316,21 +313,36 @@ impl UploadManager {
         for (rec_type, field_names) in record_map { println!("{}: {:?}", rec_type, field_names); }
     }
 
-    fn parse_fit_file(&mut self, filename: &str, measurement: &str, records_of_interest: HashSet<&str>, tags: Option<Vec<(String, String)>>){
+    fn parse_fit_file(&mut self, filename: &str, measurement: &str, tags: Option<Vec<(String, String)>>){
         let mut fp = File::open(filename).unwrap();
         let mut datapoints: Vec<DataPoint> = Vec::new();
+        let mut activity: Option<String> = None;
+        let records_to_include: Vec<String> = serde_json::from_value(self.influx_config.records_to_include.clone()).unwrap();
 
         for record in fitparser::from_reader(&mut fp).unwrap() {
             let kind: &str = &record.kind().to_string();
-            
-            if !records_of_interest.contains(kind) { continue; }
+
+            if kind == "sport" {
+                for field in record.into_vec() {
+                    if field.name() == "name" {
+                        activity = Some(field.value().to_string());
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // ignore this entire data point if the record isn't on 'the list'
+            if !records_to_include.contains(&kind.to_string()) { continue; }
 
             let mut data = DataPoint::builder(measurement);
             if let Some(ref t) = tags { for (tag, value) in t { data = data.tag(tag, value); }}
+            if let Some(ref activity_name) = activity { data = data.tag("activity", activity_name); }
 
             for field in record.into_vec() {
+                // grab the timestamp (build() call will fail if this field doesn't exist in record)
                 if field.name() == "timestamp" {
-                    match NaiveDateTime::parse_from_str(&field.value().to_string().replace('"', ""), GARMIN_FIT_DATE_FORMAT){
+                    match DateTime::parse_from_str(&field.value().to_string().replace('"', ""), GARMIN_FIT_DATE_FORMAT){
                         Ok(ts) => { data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); },
                         Err(e) => { 
                             error!("Unable to parse timestamp from 'timestamp' field value: {} in record type {}. Error: {}", &field.value(), kind, e);

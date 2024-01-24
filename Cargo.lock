@@ -655,10 +655,10 @@ dependencies = [
  "garmin_client 0.1.4",
  "garmin_download",
  "getopts",
+ "influx_upload",
  "log",
  "log4rs",
  "serde_derive",
- "upload",
 ]
 
 [[package]]
@@ -975,6 +975,32 @@ checksum = "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.3",
+]
+
+[[package]]
+name = "influx_upload"
+version = "0.1.3"
+dependencies = [
+ "bytes",
+ "chrono",
+ "config",
+ "fitparser",
+ "futures",
+ "getopts",
+ "influxdb2",
+ "log",
+ "log4rs",
+ "oauth1",
+ "regex",
+ "reqwest",
+ "reqwest-oauth1",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio",
+ "url",
+ "url-builder",
+ "zip",
 ]
 
 [[package]]
@@ -2486,32 +2512,6 @@ name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
-
-[[package]]
-name = "upload"
-version = "0.1.2"
-dependencies = [
- "bytes",
- "chrono",
- "config",
- "fitparser",
- "futures",
- "getopts",
- "influxdb2",
- "log",
- "log4rs",
- "oauth1",
- "regex",
- "reqwest",
- "reqwest-oauth1",
- "serde",
- "serde_derive",
- "serde_json",
- "tokio",
- "url",
- "url-builder",
- "zip",
-]
 
 [[package]]
 name = "url"

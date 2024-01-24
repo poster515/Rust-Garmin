@@ -1,8 +1,15 @@
 {
-    "url"               : "https://localhost:8086",
+    "url"               : "http://localhost:8086",
     "org"               : "org",
-    "database"          : "metrics",
-    "bucket"            : "bucket",
+    "bucket"            : "garmin",
     "token"             : "API_TOKEN",
-    "file_base_path"    : "/home/jpost/Documents/garmin_data"
+    "file_base_path"    : "/home/jpost/Documents/garmin_data",
+    "upload_json_files" : false,
+    "upload_fit_files"  : true,
+    "records_to_include": [
+        "sleep_level", "sleep_assessment", "hrv_status_summary", 
+        "hrv_value", "respiration_rate", "monitoring_hr_data", 
+        "monitoring_info", "monitoring", "stress_level",
+        "record", "session", "time_in_zone"
+    ]
 }

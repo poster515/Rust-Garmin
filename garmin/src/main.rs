@@ -7,7 +7,7 @@ use config::{Config, File, FileFormat};
 use getopts::{Options, Matches};
 
 use garmin_download::DownloadManager;
-use upload::UploadManager;
+use influx_upload::UploadManager;
 
 fn build_options() -> Options {
     // the presence of any of these options automatically enables
