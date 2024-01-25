@@ -9,7 +9,7 @@ use chrono::{Local, NaiveDateTime, DateTime};
 
 use futures::stream;
 use config::Config;
-use log::{info, error, warn, debug};
+use log::{info, error, warn};
 use influxdb2::{Client, ClientBuilder};
 use influxdb2::models::data_point::DataPoint;
 use regex::Regex;
@@ -24,6 +24,7 @@ mod msg_type_map;
 // some reason.
 const GARMIN_JSON_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.3f";
 const GARMIN_FIT_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
+const GARMIN_EPOCH_OFFSET: i64 = 631065600;
 
 // Class for downloading health data from Garmin Connect.
 pub struct UploadManager {
@@ -234,7 +235,7 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                println!("{:?}", entry.path());
+                println!("Currently unable to parse summary json. File: {:?}", entry.path());
             }
         }
     }
@@ -247,7 +248,7 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                println!("{:?}", entry.path());
+                println!("Currently unable to parse summary json. File: {:?}", entry.path());
             }
         }
     }
@@ -260,7 +261,7 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                println!("{:?}", entry.path());
+                println!("Currently unable to parse summary json. File: {:?}", entry.path());
             }
         }
     }
@@ -318,6 +319,7 @@ impl UploadManager {
         let mut datapoints: Vec<DataPoint> = Vec::new();
         let mut activity: Option<String> = None;
         let records_to_include: Vec<String> = serde_json::from_value(self.influx_config.records_to_include.clone()).unwrap();
+        let mut last_timestamp: HashMap<String, i64> = HashMap::new();
 
         for record in fitparser::from_reader(&mut fp).unwrap() {
             let kind: &str = &record.kind().to_string();
@@ -340,21 +342,38 @@ impl UploadManager {
             if let Some(ref activity_name) = activity { data = data.tag("activity", activity_name); }
 
             for field in record.into_vec() {
-                // grab the timestamp (build() call will fail if this field doesn't exist in record)
+                // grab the timestamp.
                 if field.name() == "timestamp" {
                     match DateTime::parse_from_str(&field.value().to_string().replace('"', ""), GARMIN_FIT_DATE_FORMAT){
-                        Ok(ts) => { data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); },
-                        Err(e) => { 
+                        Ok(ts) => { 
+                            data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); 
+                            last_timestamp.insert(kind.to_string(), ts.timestamp());
+                            // info!("Found timestamp: {} for record type: {}", ts.timestamp(), kind);
+                        }, Err(e) => { 
                             error!("Unable to parse timestamp from 'timestamp' field value: {} in record type {}. Error: {}", &field.value(), kind, e);
                             break;
                         }
                     }
+                // for 'monitoring' records, 'timestamp_16' represents offset from last epoch timestamp
+                } else if field.name() == "timestamp_16" {
+                    let timestamp_16 = field.value().to_string().parse::<i64>().unwrap();
+                    if let Some(dt) = last_timestamp.get(&kind.to_string()) {
+                        // dt is unix epoch seconds, in GMT - convert to garmin epoch
+                        let mut garmin_date = *dt - GARMIN_EPOCH_OFFSET;
+
+                        // increase by difference of lower 2 bytes of timestamp
+                        garmin_date += (timestamp_16 - ( garmin_date & 0xFFFF ) ) & 0xFFFF;
+
+                        // convert back to unix epoch
+                        garmin_date += GARMIN_EPOCH_OFFSET;
+                        let metric_date = NaiveDateTime::from_timestamp_opt(garmin_date, 0).unwrap();
+                        data = data.timestamp(metric_date.timestamp_nanos_opt().unwrap());
+                    }
                 // some records have fields like 'unknown_field_X' - ignore those.
                 // some records have another field called 'local_timestamp' - just ignore those too.
                 } else if !field.name().contains("unknown") && !field.name().contains("timestamp") {
-                    match field.value().to_string().parse::<f64>() {
-                        Ok(value) => { data = data.field(String::from(field.name()), value); },
-                        Err(e) => { warn!("Unable to coerce field {} value into f64. Error: {}", field.name(), e); }
+                    if let Ok(value) = field.value().to_string().parse::<f64>() {
+                        data = data.field(String::from(field.name()), value);
                     }
                 }
             }
