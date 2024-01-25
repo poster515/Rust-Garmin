@@ -13,11 +13,13 @@
         "sleep_start_date"              : "2023-12-31",
         "rhr_start_date"                : "2023-12-31",
         "monitoring_start_date"         : "2023-12-31",
-        "hydration_date"                : "2023-12-31",
+        "hydration_start_date"          : "2023-12-31",
+        "activity_start_date"           : "2023-12-31",
         "download_today_data"           : false
     },
     "activities": {
-        "num_activities_to_download"    : 1
+        "num_activities_to_download"    : 1,
+        "save_regardless_of_date"       : false
     },
     "file": {
         "file_date_format"              : "%Y-%m-%d",
