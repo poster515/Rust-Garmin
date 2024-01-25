@@ -3,6 +3,13 @@
 
 This repo contains libraries for downloading JSON and FIT file data from Garmin, parsing said files, and uploading data into an InfluxDb server. This is a side project that will likely always be a work in progress.
 
+InfluxDB PoC:
+<img width="959" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/f67db956-d9e6-440d-bf02-7dd243ba9836">
+
+Grafana PoC:
+<img width="957" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/f778c765-ecf6-4423-9022-7293ec74ca9a">
+
+
 ### Basic Configs
 
 #### log4rs.yml
