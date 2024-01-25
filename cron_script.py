@@ -42,7 +42,8 @@ if __name__ == '__main__':
         "--sleep_date" : f"{yesterday}",
         "--resting_heart_date" : f"{yesterday}",
         "--monitor_date" : f"{yesterday}",
-        "--hydration_date" : f"{yesterday}"
+        "--hydration_date" : f"{yesterday}",
+        "--activity_date": f"{yesterday}",
     }
 
     for metric, dt in options.items():

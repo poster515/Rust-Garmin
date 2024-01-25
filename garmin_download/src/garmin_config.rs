@@ -21,12 +21,14 @@ pub struct DataConfig {
     pub rhr_start_date: String,
     pub monitoring_start_date: String,
     pub hydration_start_date: String,
+    pub activity_start_date: String,
     pub download_today_data: bool,
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct ActivityConfig {
-    pub num_activities_to_download: String
+    pub num_activities_to_download: String,
+    pub save_regardless_of_date: bool
 }
 
 #[derive(Debug, Deserialize, Default)]

@@ -38,6 +38,8 @@ Note that 'download_data_today' is a sort of universal override - it will ONLY d
                         download date for monitoring data
     -o, --hydration_date use YYY-MM-DD format
                         download date for hydration data
+    -a  --activity_date use YYY-MM-DD format
+                        download date for activity data
 ```
 
 #### Upload Behavior
@@ -110,3 +112,16 @@ For almost all monitoring metrics it turns out that the FIT files contain everyt
 In influx you can configure telegraf via UI. Simply specify what things you want telegraf to monitor and the influx UI will generate a telegraf.conf for you. Copy and pastet that into the /etc/metrics/telegraf/telegraf.conf file from earlier, and insert your API token in the influxdb section.
 
 Configuring grafana is also fairly straight forward. I configured mine using the FluxQL UI, using only the API token generated from the influx UI. Currently I have yet to do more with grafana but will hopefully update this doc if I do.
+
+### Activity Gotchyas
+There is a config 'num_activities_to_download' which requests summaries for the last N activities, including start times and activity IDs. From here, another API is called to actually retrieve detailed summaries for each activity.
+
+Use the following flow to understand how activity details are actually saved:
+
+-If 'download_today_data' is true, only activities that started between midnight today (using local TZ) to midnight tomorrow morning will be saved. 
+-If 'save_regardless_of_date' is false, only activities from midnight on activity_start_date to midnight the next day will be saved.
+-Else, the activity is by default saved to file.
+
+If you are using this script programmatically (e.g., daily), would recommend choosing a reasonable value (e.g., 10) to fetch info for activities. If you wanted to, say, download a large number of historical activities, set 'download_today_data' to false, 'save_regardless_of_date' to true, and 'num_activities_to_download' to a large number (1000 or so? haven't stress tested that api personally). This would download summary data (FIT files) for the last 1000 activities.
+
+One known issue with the session management is that you can only request activity summaries ONCE per session token, and Garmin will lock you out for a few hours if you repeatedly abuse their OAuth2.0 architecture by constantly requesting new tokens.

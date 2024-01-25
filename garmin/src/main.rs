@@ -43,6 +43,11 @@ fn build_options() -> Options {
         "download date for monitoring data",
         "use YYY-MM-DD format");
 
+    options.optopt("a",
+        "activity_date",
+        "download date for activity data",
+        "use YYY-MM-DD format");
+
     options.optflag("h", 
         "help", 
         "print this help menu");

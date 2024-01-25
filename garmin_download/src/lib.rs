@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
-use chrono::{Local, NaiveDateTime, ParseError};
+use chrono::{Local, NaiveDateTime, ParseError, Days};
 use config::Config;
 use getopts::Matches;
 use log::{debug, error, info, warn};
@@ -98,22 +98,32 @@ impl DownloadManager {
         if let Some(options) = options {
             // go through options and override anything user specified in CL args
             if let Ok(Some(date)) = options.opt_get::<String>("u") {
-                dm.garmin_config.data.summary_date = date; 
+                dm.garmin_config.data.summary_date = date;
+                dm.garmin_config.enabled_stats.daily_summary = true; 
             }
             if let Ok(Some(date)) = options.opt_get::<String>("w") {
                 dm.garmin_config.data.weight_start_date = date;
+                dm.garmin_config.enabled_stats.weight = true;
             }
             if let Ok(Some(date)) = options.opt_get::<String>("s") {
                 dm.garmin_config.data.sleep_start_date = date;
+                dm.garmin_config.enabled_stats.sleep = true;
             }
             if let Ok(Some(date)) = options.opt_get::<String>("r") {
                 dm.garmin_config.data.rhr_start_date = date;
+                dm.garmin_config.enabled_stats.rhr = true;
             }
             if let Ok(Some(date)) = options.opt_get::<String>("o") {
                 dm.garmin_config.data.hydration_start_date = date;
+                dm.garmin_config.enabled_stats.hydration = true;
             }
             if let Ok(Some(date)) = options.opt_get::<String>("m") {
                 dm.garmin_config.data.monitoring_start_date = date;
+                dm.garmin_config.enabled_stats.monitoring = true;
+            }
+            if let Ok(Some(date)) = options.opt_get::<String>("a") {
+                dm.garmin_config.data.activity_start_date = date;
+                dm.garmin_config.enabled_stats.activities = true;
             }
         }
         dm
@@ -298,6 +308,10 @@ impl DownloadManager {
     pub fn get_activity_summaries(&mut self, activity_count: u32) {
         // get high level activity summary, each entry contains activity ID that
         // can be used to get more specific info
+        if activity_count == 0 {
+            warn!("User requested 0 activities, check config");
+            return;
+        }
         let endpoint: String = String::from(&self.garmin_connect_activity_search_url);
         let count = format!("{}", activity_count);
         let params = HashMap::from([
@@ -317,31 +331,33 @@ impl DownloadManager {
         for activity in lookup {
             let id = &activity["activityId"];
             let name = &activity["activityName"].to_string().replace('"', "");
+            let activity_string = &activity["startTimeLocal"].to_string().replace('"', "");
+            let activity_date = NaiveDateTime::parse_from_str(activity_string, "%Y-%m-%d %H:%M:%S").unwrap();
 
-            info!("====================================================");
-            info!("Getting summary for activity {}: {}, on {}", &id, &name, &activity["startTimeLocal"]);
+            let mut start_string: Option<String> = None;
 
             if self.garmin_config.data.download_today_data {
-                // check if activity was actually today
-                let activity_string = &activity["startTimeLocal"].to_string().replace('"', "");
-                let midnight_string = format!("{}", Local::now().format("%Y-%m-%d 00:00:00"));
-                
-                let activity = NaiveDateTime::parse_from_str(activity_string, "%Y-%m-%d %H:%M:%S").unwrap();
-                let midnight = NaiveDateTime::parse_from_str(&midnight_string, "%Y-%m-%d %H:%M:%S").unwrap();
+                // check if the activity started today
+                start_string = Some(format!("{}", Local::now().format("%Y-%m-%d 00:00:00")));
 
-                if activity.timestamp_nanos_opt() > midnight.timestamp_nanos_opt() {
-                    // download basic info as json, and total activity as FIT file
-                    self.get_activity_info(id.to_string().parse::<u64>().unwrap());
-                    self.get_activity_details(id.to_string().parse::<u64>().unwrap());
-                } else {
-                    info!("Ignoring activity '{}' from: {}", &name, activity_string);
-                    return;
-                }
-            } else {
-                // just download regardless of date
-                self.get_activity_info(id.to_string().parse::<u64>().unwrap());
-                self.get_activity_details(id.to_string().parse::<u64>().unwrap());
+            } else if !self.garmin_config.activities.save_regardless_of_date {
+                // check if activity started on the date specified
+                start_string = Some(format!("{} 00:00:00", self.garmin_config.data.activity_start_date).replace('"', ""));
             }
+
+            if let Some(start_string) = start_string {
+                let start = NaiveDateTime::parse_from_str(&start_string, "%Y-%m-%d %H:%M:%S").unwrap();
+                let end = start.clone().checked_add_days(Days::new(1)).unwrap();
+
+                if (activity_date.timestamp_nanos_opt() < start.timestamp_nanos_opt()) ||
+                (activity_date.timestamp_nanos_opt() >= end.timestamp_nanos_opt()) {
+                    info!("Ignoring activity '{}' from: {}", &name, activity_string);
+                    continue;
+                }
+            }
+
+            self.get_activity_info(id.to_string().parse::<u64>().unwrap());
+            self.get_activity_details(id.to_string().parse::<u64>().unwrap());
         }
     }
 
