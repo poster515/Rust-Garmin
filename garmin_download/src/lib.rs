@@ -1,5 +1,7 @@
 
 use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
 use chrono::{Local, NaiveDateTime, ParseError};
 use config::Config;
 use getopts::Matches;
@@ -11,7 +13,7 @@ use garmin_client;
 mod garmin_config;
 mod garmin_structs;
 
-pub use crate::garmin_client::{GarminClient, ClientTraits};
+pub use crate::garmin_client::{GarminClient, ClientTraits, SESSION_FILE};
 pub use crate::garmin_config::GarminConfig;
 pub use crate::garmin_structs::PersonalInfo;
 
@@ -151,12 +153,33 @@ impl DownloadManager {
     ///
     /// User can retrieve full response text via self.get_last_resp_text() if needed.
     pub fn get_user_profile(&mut self){
+
+        // check session file for displayName and fullName
+        // if session file exists: open, append, save user profile info
+        match fs::read_to_string(&SESSION_FILE) {
+            Ok(file_contents) => {
+                let map: HashMap<String, serde_json::Value> = serde_json::from_str(&file_contents).unwrap();
+
+                if map.contains_key("displayName") && map.contains_key("fullName"){
+                    self.display_name = map["displayName"].to_string().replace('"', "");
+                    self.full_name = map["fullName"].to_string().replace('"', "");
+                    info!("Found display name in session file: '{}'", self.display_name);
+                    info!("Found full name in session file: '{}'", self.full_name);
+                    return;
+                } else {
+                    info!("Unable to locate user profile from session file, requesting...");
+                }
+            }, Err(_) => {
+                warn!("Unable to locate session file, did you login yet?");
+            }
+        }
+
         // response will contain displayName and fullName
         self.garmin_client.api_request(&self.garmin_user_profile_url, None, true, None);
 
         let response_text = self.get_last_resp_text();
         if response_text.len() == 0 {
-            warn!("Got empty response from API, unable to get user profile");
+            warn!("Got empty response from API, unable to get user profile. Are you using the latest client version?");
             return;
         }
 
@@ -170,6 +193,23 @@ impl DownloadManager {
         if lookup.contains_key("fullName"){
             self.full_name = lookup["fullName"].to_string().replace('"', "");
             info!("Full name: '{}'", self.full_name);
+        }
+
+        // if session file exists: open, append, save user profile info
+        match fs::read_to_string(&SESSION_FILE) {
+            Ok(file_contents) => {
+                let mut map: HashMap<String, serde_json::Value> = serde_json::from_str(&file_contents).unwrap();
+                map.extend(lookup);
+
+                let file = File::create(&SESSION_FILE).unwrap(); 
+                let mut writer = BufWriter::new(file);
+                if let Ok(_) = serde_json::to_writer_pretty(&mut writer, &map) {
+                    match writer.flush() {
+                        Ok(_) => { }, 
+                        Err(e) => { error!("Error flushing writer: {}", e); }
+                    }
+                }
+            }, Err(e) => { info!("Unable opening garmin_client session file: {}", e); }
         }
     }
 

@@ -11,5 +11,10 @@
         "hrv_value", "respiration_rate", "monitoring_hr_data", 
         "monitoring_info", "monitoring", "stress_level",
         "record", "session", "time_in_zone"
+    ],
+    "files_to_prune": [
+        "zip",
+        "json",
+        "fit"
     ]
 }

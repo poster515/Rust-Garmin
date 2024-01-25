@@ -16,7 +16,7 @@ use zip;
 
 mod auth;
 
-const SESSION_FILE: &str = ".garmin_session.json";
+pub const SESSION_FILE: &str = ".garmin_session.json";
 
 /// Basic set of public functions required to use this client.
 pub trait ClientTraits {
