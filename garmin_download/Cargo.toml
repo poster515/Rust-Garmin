@@ -4,7 +4,7 @@ version = "0.1.8"
 edition = "2021"
 license = "GPL-3.0"
 description = "Provides a DownloadManager struct capable of downloading data directly from Garmin"
-rust-version = "1.74"
+rust-version = "1.70"
 repository = "https://github.com/poster515/Rust-Garmin/"
 keywords = ["garmin", "download", "activities", "metrics"]
 

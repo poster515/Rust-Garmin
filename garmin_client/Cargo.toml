@@ -4,7 +4,7 @@ version = "0.1.5"
 edition = "2021"
 license = "GPL-3.0"
 description = "Provides an oauth2.0-capable client that interfaces with Garmin"
-rust-version = "1.74"
+rust-version = "1.70"
 repository = "https://github.com/poster515/Rust-Garmin/"
 keywords = ["garmin", "fitness", "client", "oauth2"]
 
