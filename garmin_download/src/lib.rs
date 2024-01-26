@@ -350,7 +350,7 @@ impl DownloadManager {
 
             if let Some(start_string) = start_string {
                 let start = NaiveDateTime::parse_from_str(&start_string, "%Y-%m-%d %H:%M:%S").unwrap();
-                let end = start.clone().checked_add_days(Days::new(1)).unwrap();
+                let end = start.clone().checked_add_days(Days::new(self.garmin_config.data.num_days_from_start_date)).unwrap();
 
                 if (activity_date.timestamp_nanos_opt() < start.timestamp_nanos_opt()) ||
                 (activity_date.timestamp_nanos_opt() >= end.timestamp_nanos_opt()) {
