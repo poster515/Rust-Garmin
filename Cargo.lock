@@ -652,7 +652,7 @@ version = "0.1.3"
 dependencies = [
  "anyhow",
  "config",
- "garmin_client",
+ "garmin_client 0.1.6",
  "garmin_download",
  "getopts",
  "influx_upload",
@@ -680,12 +680,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "garmin_client"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8da5aebe79f6c517f7fca1866283f42f41efc1cb58ed7c10a1972892291f8cc"
+dependencies = [
+ "chrono",
+ "log",
+ "log4rs",
+ "regex",
+ "reqwest",
+ "reqwest-oauth1",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "url-builder",
+ "zip",
+]
+
+[[package]]
 name = "garmin_download"
 version = "0.1.9"
 dependencies = [
  "chrono",
  "config",
- "garmin_client",
+ "garmin_client 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts",
  "log",
  "log4rs",
