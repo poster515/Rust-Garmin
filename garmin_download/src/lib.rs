@@ -267,7 +267,9 @@ impl DownloadManager {
 
         debug!("login domain: {}, username: {}, password: {}", domain, username, password);
 
+        // login, get OAuth2.0 token, get user profile, and save all to session file
         self.garmin_client.login(username, password);
+        self.get_user_profile();
     }
 
     /// Retrieves and prints the user's personal info (e.g., userId, birthday, email, etc)

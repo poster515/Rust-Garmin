@@ -93,12 +93,13 @@ impl UploadManager {
         match self.influx_client.as_ref() {
             Some(client) => {
                 let rt = tokio::runtime::Runtime::new().unwrap();
+                let num = data.len();
                 let future = rt.block_on({
                     client.write(&self.influx_config.bucket, stream::iter(data))
                 });
 
                 match future {
-                    Ok(_) => { info!("Published datapoints!"); return true; },
+                    Ok(_) => { info!("Published {} datapoints!", num); return true; },
                     Err(e) => { error!("Unable to write data point(s): {:?}", e); return false; }
                 }
             }, None => {
@@ -111,6 +112,20 @@ impl UploadManager {
 
     fn get_extension_from_filename<'a>(&'a self, filename: &'a str) -> Option<&str> {
         Path::new(filename).extension().and_then(OsStr::to_str)
+    }
+
+    fn search_for_float(&self, data: &serde_json::Value, key: &str) -> Option<f64> {
+        match data.get(key) {
+            Some(value) => { value.as_f64()
+            }, None => { None }
+        }
+    }
+
+    fn search_for_i64(&self, data: &serde_json::Value, key: &str) -> Option<i64> {
+        match data.get(key) {
+            Some(value) => { value.as_i64()
+            }, None => { None }
+        }
     }
 
     fn upload_activity_info(&mut self) {
@@ -132,31 +147,33 @@ impl UploadManager {
 
                             let timestamp = self.garmin_ts_to_nanos_since_epoch(activity_data["startTimeLocal"].as_str().unwrap());
 
-                            let data = DataPoint::builder("activities")
-                                .tag("type",                        activity["activityName"].to_string())
-                                .field("activityTrainingLoad",      activity_data["activityTrainingLoad"].as_f64().unwrap())
-                                .field("anaerobicTrainingEffect",   activity_data["anaerobicTrainingEffect"].as_f64().unwrap())
-                                .field("averageHR",                 activity_data["averageHR"].as_f64().unwrap())
-                                .field("averageSpeed",              activity_data["averageSpeed"].as_f64().unwrap())
-                                .field("avgRespirationRate",        activity_data["avgRespirationRate"].as_f64().unwrap())
-                                .field("bmrCalories",               activity_data["bmrCalories"].as_f64().unwrap())
-                                .field("calories",                  activity_data["calories"].as_f64().unwrap())
-                                .field("distance",                  activity_data["distance"].as_f64().unwrap())
-                                .field("duration",                  activity_data["duration"].as_f64().unwrap())
-                                .field("elapsedDuration",           activity_data["elapsedDuration"].as_f64().unwrap())
-                                .field("maxHR",                     activity_data["maxHR"].as_f64().unwrap())
-                                .field("maxRespirationRate",        activity_data["maxRespirationRate"].as_f64().unwrap())
-                                .field("minActivityLapDuration",    activity_data["minActivityLapDuration"].as_f64().unwrap())
-                                .field("minRespirationRate",        activity_data["minRespirationRate"].as_f64().unwrap())
-                                .field("moderateIntensityMinutes",  activity_data["moderateIntensityMinutes"].as_f64().unwrap())
-                                .field("movingDuration",            activity_data["movingDuration"].as_f64().unwrap())
-                                .field("steps",                     activity_data["steps"].as_i64().unwrap())
-                                .field("trainingEffect",            activity_data["trainingEffect"].as_f64().unwrap())
-                                .field("vigorousIntensityMinutes",  activity_data["vigorousIntensityMinutes"].as_f64().unwrap())
-                                .timestamp(timestamp)
-                                .build();
+                            let mut data = DataPoint::builder("activity_summary")
+                                .tag("activity",                    activity["activityTypeDTO"]["typeKey"].to_string())
+                                .field("name",                      activity["activityName"].to_string())
+                                .field("activityId",                activity["activityId"].to_string());
 
-                            self.write_data(vec![data.unwrap()]);
+                            if let Some(float) = self.search_for_float(activity_data, "activityTrainingLoad") { data = data.field("activityTrainingLoad", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "anaerobicTrainingEffect") { data = data.field("anaerobicTrainingEffect", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "averageHR") { data = data.field("averageHR", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "averageSpeed") { data = data.field("averageSpeed", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "avgRespirationRate") { data = data.field("avgRespirationRate", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "bmrCalories") { data = data.field("bmrCalories", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "calories") { data = data.field("calories", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "distance") { data = data.field("distance", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "duration") { data = data.field("duration", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "elapsedDuration") { data = data.field("elapsedDuration", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "maxHR") { data = data.field("maxHR", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "maxRespirationRate") { data = data.field("maxRespirationRate", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "minActivityLapDuration") { data = data.field("minActivityLapDuration", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "minRespirationRate") { data = data.field("minRespirationRate", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "movingDuration") { data = data.field("movingDuration", float); }
+                            if let Some(float) = self.search_for_float(activity_data, "trainingEffect") { data = data.field("trainingEffect", float); }
+
+                            if let Some(int) = self.search_for_i64(activity_data, "steps") { data = data.field("steps", int); }
+                            if let Some(int) = self.search_for_i64(activity_data, "moderateIntensityMinutes") { data = data.field("moderateIntensityMinutes", int); }
+                            if let Some(int) = self.search_for_i64(activity_data, "vigorousIntensityMinutes") { data = data.field("vigorousIntensityMinutes", int); }
+
+                            self.write_data(vec![data.timestamp(timestamp).build().unwrap()]);
 
                         }, Err(e) => { error!("Failed to open file {:?}, error: {}", entry.path(), e); }
                     }
@@ -179,7 +196,7 @@ impl UploadManager {
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
                     let id = self.get_activity_id_from_filename(&filename);
-                    self.parse_fit_file(&filename, "activity", Some(vec![("id".to_string(), id)]));
+                    self.parse_fit_file(&filename, "activity_details", Some(vec![("activityId".to_string(), id)]));
                 }
             }
         }
@@ -236,7 +253,7 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                println!("Currently unable to parse summary json. File: {:?}", entry.path());
+                warn!("Currently unable to parse summary json. File: {:?}", entry.path());
             }
         }
     }
@@ -249,10 +266,11 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                println!("Currently unable to parse summary json. File: {:?}", entry.path());
+                warn!("Currently unable to parse summary json. File: {:?}", entry.path());
             }
         }
     }
+
     fn upload_summary_data(&mut self) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("day_summary");
@@ -262,7 +280,7 @@ impl UploadManager {
         }
         for entry in folder.read_dir().expect(&format!("Could not open folder {:?} for reading", folder)) {
             if let Ok(entry) = entry {
-                println!("Currently unable to parse summary json. File: {:?}", entry.path());
+                warn!("Currently unable to parse summary json. File: {:?}", entry.path());
             }
         }
     }
@@ -312,7 +330,7 @@ impl UploadManager {
             }
         }
 
-        for (rec_type, field_names) in record_map { println!("{}: {:?}", rec_type, field_names); }
+        for (rec_type, field_names) in record_map { warn!("{}: {:?}", rec_type, field_names); }
     }
 
     fn parse_fit_file(&mut self, filename: &str, measurement: &str, tags: Option<Vec<(String, String)>>){
@@ -321,6 +339,7 @@ impl UploadManager {
         let mut activity: Option<String> = None;
         let records_to_include: Vec<String> = serde_json::from_value(self.influx_config.records_to_include.clone()).unwrap();
         let mut last_timestamp: HashMap<String, i64> = HashMap::new();
+        info!("Attempting to parse binary: {}", filename);
 
         for record in fitparser::from_reader(&mut fp).unwrap() {
             let kind: &str = &record.kind().to_string();
@@ -340,7 +359,7 @@ impl UploadManager {
 
             let mut data = DataPoint::builder(measurement);
             if let Some(ref t) = tags { for (tag, value) in t { data = data.tag(tag, value); }}
-            if let Some(ref activity_name) = activity { data = data.tag("activity", activity_name); }
+            if let Some(ref activity_name) = activity { data = data.tag("activityName", activity_name); }
 
             for field in record.into_vec() {
                 // grab the timestamp.
@@ -349,7 +368,6 @@ impl UploadManager {
                         Ok(ts) => { 
                             data = data.timestamp(ts.timestamp_nanos_opt().unwrap()); 
                             last_timestamp.insert(kind.to_string(), ts.timestamp());
-                            // info!("Found timestamp: {} for record type: {}", ts.timestamp(), kind);
                         }, Err(e) => { 
                             error!("Unable to parse timestamp from 'timestamp' field value: {} in record type {}. Error: {}", &field.value(), kind, e);
                             break;
@@ -372,7 +390,7 @@ impl UploadManager {
                     }
                 // garmin represents position data as 32 bit unsigned int, so we have to divide by representation 
                 // range to get actual float.
-                } else if field.name().contains("position_") {
+                } else if field.name().contains("_lat") || field.name().contains("_long") {
                     if let Ok(value) = field.value().to_string().parse::<f64>() {
                         data = data.field(String::from(field.name()), value / GARMIN_POSITION_FACTOR);
                     }
