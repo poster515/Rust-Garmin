@@ -25,6 +25,7 @@ mod msg_type_map;
 const GARMIN_JSON_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.3f";
 const GARMIN_FIT_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
 const GARMIN_EPOCH_OFFSET: i64 = 631065600;
+const GARMIN_POSITION_FACTOR: f64 = 11930465.0;
 
 // Class for downloading health data from Garmin Connect.
 pub struct UploadManager {
@@ -368,6 +369,12 @@ impl UploadManager {
                         garmin_date += GARMIN_EPOCH_OFFSET;
                         let metric_date = NaiveDateTime::from_timestamp_opt(garmin_date, 0).unwrap();
                         data = data.timestamp(metric_date.timestamp_nanos_opt().unwrap());
+                    }
+                // garmin represents position data as 32 bit unsigned int, so we have to divide by representation 
+                // range to get actual float.
+                } else if field.name().contains("position_") {
+                    if let Ok(value) = field.value().to_string().parse::<f64>() {
+                        data = data.field(String::from(field.name()), value / GARMIN_POSITION_FACTOR);
                     }
                 // some records have fields like 'unknown_field_X' - ignore those.
                 // some records have another field called 'local_timestamp' - just ignore those too.

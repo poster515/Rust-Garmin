@@ -18,21 +18,20 @@ if __name__ == '__main__':
     with open(config_file, "r") as file:
         config = json.load(file)
 
-    # remove files older than yesterday - allows us to keep yesterday's files for a whole day.
+    # remove files older than midnight - allows us to keep yesterday's files for a whole day.
     output_folder = config["file_base_path"]
     tz = datetime.timezone(-timedelta(hours=5))
-    yesterday = datetime.datetime.now(tz) - timedelta(days=1)
-    print(f"Attempting to prune non-*zip files in output directory {output_folder}")
+    midnight = datetime.datetime.combine(date.today(), datetime.time(0, 0, 0, 0, tz), tzinfo=tz)
+    print(f"Attempting to prune files in output directory {output_folder}")
     for root, dirs, files in os.walk(output_folder):
         for name in files:
             filename = os.path.join(root, name)
             timestamp = os.path.getctime(filename)
             creation_date = datetime.datetime.fromtimestamp(timestamp, tz=tz)
 
-            # only delete fit files for now since we're keeping the zips
             _, ext = os.path.splitext(filename)
-            if creation_date < yesterday and ext in config["files_to_prune"]:
-                print(f"Pruning old file {filename}, created {timestamp}")
+            if creation_date < midnight and ext in config["files_to_prune"]:
+                print(f"Pruning old file {filename}, created {creation_date}")
                 os.remove(filename)
 
     # set the dates for yesterday so we get a whole days of data
@@ -58,5 +57,5 @@ if __name__ == '__main__':
     # remove the session file in case the expiration date is more than 1 day
     try:
         os.remove(".garmin_session.json")
-    except RuntimeError:
+    except FileNotFoundError:
         pass

@@ -23,6 +23,7 @@ root:
   level: debug
   appenders:
     - stdout
+    - garmin
 
 loggers:
   app::backend::db:

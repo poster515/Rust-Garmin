@@ -13,8 +13,8 @@
         "record", "session", "time_in_zone"
     ],
     "files_to_prune": [
-        "zip",
-        "json",
-        "fit"
+        ".zip",
+        ".json",
+        ".fit"
     ]
 }
