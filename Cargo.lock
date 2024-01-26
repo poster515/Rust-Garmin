@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "garmin_download"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "chrono",
  "config",
@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "influx_upload"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "bytes",
  "chrono",

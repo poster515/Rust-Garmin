@@ -9,6 +9,8 @@ if __name__ == '__main__':
     # run this script at 5am to download/upload previous day of data.
 
     # need to set 'download_today_data' to false in garmin_config.json!
+    # also make sure that 'num_days_from_start_date' is set to correct 
+    # number of days. If this is a daily job then set to 1.
 
     # First go through and prune the non-*.zip output files so we don't
     # parse them the next day.
@@ -49,6 +51,12 @@ if __name__ == '__main__':
     for metric, dt in options.items():
         exe.append(metric)
         exe.append(dt)
-    print(f"Executing command:\n\n{" ".join(exe)}\n")
+    print(f"Executing command:\n\n{' '.join(exe)}\n")
     output = subprocess.run(exe, capture_output=True)
     print(output.stdout)
+
+    # remove the session file in case the expiration date is more than 1 day
+    try:
+        os.remove(".garmin_session.json")
+    except RuntimeError:
+        pass

@@ -126,6 +126,9 @@ impl DownloadManager {
                 dm.garmin_config.enabled_stats.activities = true;
             }
         }
+        if dm.garmin_config.data.download_today_data {
+            dm.garmin_config.data.num_days_from_start_date = 1;
+        }
         dm
     }
 
@@ -239,7 +242,7 @@ impl DownloadManager {
         return String::from(&self.full_name);
     }
 
-    fn get_download_date(&self, default_date: &str) -> NaiveDateTime {
+    fn get_download_date(&self, default_date: &str, day_offset: u64) -> NaiveDateTime {
         // should be used by all date-getters to 1) see if we're 
         // overriding to today and 2) make sure the format is correct if not
         if self.garmin_config.data.download_today_data {
@@ -250,7 +253,7 @@ impl DownloadManager {
         temp_date.push_str(" 00:00:00");
 
         match NaiveDateTime::parse_from_str(&temp_date, "%Y-%m-%d %H:%M:%S") {
-            Ok(date) => { date },
+            Ok(date) => { date.checked_add_days(Days::new(day_offset)).unwrap() },
             Err(e) => panic!("Expected default date in '%Y-%m-%d', format, got: {}, error: {}", default_date, e)
         }
     }
@@ -398,99 +401,110 @@ impl DownloadManager {
     /// Downloads FIT file info for the configured monitoring date.
     pub fn monitoring(&mut self) {
         // monitoring data downloaded as a zip file containing the fit file.
-        let date = self.get_download_date(&self.garmin_config.data.monitoring_start_date);
-        let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
-        endpoint.push_str("/wellness/");
-        endpoint.push_str(&format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
-        
-        let filename = self.build_file_name("monitoring", Some(date), None, ".zip");
-        self.garmin_client.api_request(&endpoint, None, false, filename);
+        for i in 0..self.garmin_config.data.num_days_from_start_date {
+            let date = self.get_download_date(&self.garmin_config.data.monitoring_start_date, i);
+            let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
+            endpoint.push_str("/wellness/");
+            endpoint.push_str(&format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
+            
+            let filename = self.build_file_name("monitoring", Some(date), None, ".zip");
+            self.garmin_client.api_request(&endpoint, None, false, filename);
+        }
     }
 
     /// Downloads sleep info as JSON file, for the configured sleep date.
     pub fn get_sleep(&mut self) {
-        let date = self.get_download_date(&self.garmin_config.data.sleep_start_date);
-        let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
-        let mut endpoint: String = String::from(&self.garmin_connect_sleep_daily_url);
-        endpoint.push_str(&format!("/{}", &self.get_display_name()));
+        for i in 0..self.garmin_config.data.num_days_from_start_date {
+            let date = self.get_download_date(&self.garmin_config.data.sleep_start_date, i);
+            let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
+            let mut endpoint: String = String::from(&self.garmin_connect_sleep_daily_url);
+            endpoint.push_str(&format!("/{}", &self.get_display_name()));
 
-        let params = HashMap::from([
-            ("date", date_str.as_str()),
-            ("nonSleepBufferMinutes", "60")
-        ]);
+            let params = HashMap::from([
+                ("date", date_str.as_str()),
+                ("nonSleepBufferMinutes", "60")
+            ]);
 
-        let filename = self.build_file_name("sleep", Some(date), None, ".json");
-        self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+            let filename = self.build_file_name("sleep", Some(date), None, ".json");
+            self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+        }
     }
 
     /// Downloads resting heart rate info as JSON file, for the configured date.
     pub fn get_resting_heart_rate(&mut self) {
-        let date = self.get_download_date(&self.garmin_config.data.rhr_start_date);
-        let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
-        let mut endpoint = String::from(&self.garmin_connect_rhr);
-        endpoint.push_str(&format!("/{}", &self.get_display_name()));
+        for i in 0..self.garmin_config.data.num_days_from_start_date {
+            let date = self.get_download_date(&self.garmin_config.data.rhr_start_date, i);
+            let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
+            let mut endpoint = String::from(&self.garmin_connect_rhr);
+            endpoint.push_str(&format!("/{}", &self.get_display_name()));
 
-        let params = HashMap::from([
-            ("fromDate", date_str.as_str()),
-            ("untilDate", date_str.as_str()),
-            ("metricId", "60")
-        ]);
-        let filename = self.build_file_name("heartrate", Some(date), None, ".json");
-        self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+            let params = HashMap::from([
+                ("fromDate", date_str.as_str()),
+                ("untilDate", date_str.as_str()),
+                ("metricId", "60")
+            ]);
+            let filename = self.build_file_name("heartrate", Some(date), None, ".json");
+            self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+        }
     }
 
      /// Downloads weight info as JSON file, for the configured date.
     pub fn get_weight(&mut self) {
-        let date = self.get_download_date(&self.garmin_config.data.weight_start_date);
-        let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
-        match self.get_date_in_epoch_ms(&date_str) {
-            Ok(epoch_millis) => {
-                let endpoint = String::from(&self.garmin_connect_weight_url);
-                let params = HashMap::from([
-                    ("startDate", date_str.as_str()),
-                    ("endDate", date_str.as_str()),
-                    ("_", &epoch_millis.as_str())
-                ]);
-                let filename = self.build_file_name("weight", Some(date), None, ".json");
-                self.garmin_client.api_request(&endpoint, Some(params), true, filename);
-            },
-            Err(_) => {}
+        for i in 0..self.garmin_config.data.num_days_from_start_date {
+            let date = self.get_download_date(&self.garmin_config.data.weight_start_date, i);
+            let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
+            match self.get_date_in_epoch_ms(&date_str) {
+                Ok(epoch_millis) => {
+                    let endpoint = String::from(&self.garmin_connect_weight_url);
+                    let params = HashMap::from([
+                        ("startDate", date_str.as_str()),
+                        ("endDate", date_str.as_str()),
+                        ("_", &epoch_millis.as_str())
+                    ]);
+                    let filename = self.build_file_name("weight", Some(date), None, ".json");
+                    self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+                }, Err(_) => {}
+            }
         }
     }
 
      /// Downloads summary info as JSON file, for the configured date.
     pub fn get_summary_day(&mut self) {
-        let date = self.get_download_date(&self.garmin_config.data.summary_date);
-        let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
-        match self.get_date_in_epoch_ms(&date_str) {
-            Ok(epoch_millis) => {
+        for i in 0..self.garmin_config.data.num_days_from_start_date {
+            let date = self.get_download_date(&self.garmin_config.data.summary_date, i);
+            let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
+            match self.get_date_in_epoch_ms(&date_str) {
+                Ok(epoch_millis) => {
 
-                let mut endpoint = String::from(&self.garmin_connect_daily_summary_url);
-                endpoint.push_str(&format!("/{}", &self.get_display_name()));
+                    let mut endpoint = String::from(&self.garmin_connect_daily_summary_url);
+                    endpoint.push_str(&format!("/{}", &self.get_display_name()));
 
-                let params = HashMap::from([
-                    ("calendarDate", date_str.as_str()),
-                    ("_", epoch_millis.as_str())
-                ]);
-                let filename = self.build_file_name("day_summary", Some(date), None, ".json");
-                self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+                    let params = HashMap::from([
+                        ("calendarDate", date_str.as_str()),
+                        ("_", epoch_millis.as_str())
+                    ]);
+                    let filename = self.build_file_name("day_summary", Some(date), None, ".json");
+                    self.garmin_client.api_request(&endpoint, Some(params), true, filename);
 
-            }, Err(e) => {
-                warn!("Unable to properly parse date: {}. Error: {}", &date_str, e);
+                }, Err(e) => {
+                    warn!("Unable to properly parse date: {}. Error: {}", &date_str, e);
+                }
             }
         }
     }
 
      /// Downloads hydration info as JSON file, for the configured date.
     pub fn get_hydration(&mut self) {
-        let date = self.get_download_date(&self.garmin_config.data.hydration_start_date);
-        let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
+        for i in 0..self.garmin_config.data.num_days_from_start_date {
+            let date = self.get_download_date(&self.garmin_config.data.hydration_start_date, i);
+            let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
 
-        let mut endpoint = String::from(&self.garmin_connect_daily_hydration_url);
-        endpoint.push_str(&format!("/hydration_{}", &date_str));
+            let mut endpoint = String::from(&self.garmin_connect_daily_hydration_url);
+            endpoint.push_str(&format!("/hydration_{}", &date_str));
 
-        let filename = self.build_file_name("hydration", Some(date), None, ".json");
-        self.garmin_client.api_request(&endpoint, None, true, filename);
+            let filename = self.build_file_name("hydration", Some(date), None, ".json");
+            self.garmin_client.api_request(&endpoint, None, true, filename);
+        }
     }
 
     fn get_date_in_epoch_ms(&self, date_str: &str) -> Result<String, ParseError> {

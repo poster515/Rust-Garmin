@@ -15,11 +15,12 @@
         "monitoring_start_date"         : "2023-12-31",
         "hydration_start_date"          : "2023-12-31",
         "activity_start_date"           : "2023-12-31",
-        "download_today_data"           : false
+        "download_today_data"           : false,
+        "num_days_from_start_date"      : 365
     },
     "activities": {
-        "num_activities_to_download"    : 1,
-        "save_regardless_of_date"       : false
+        "num_activities_to_download"    : 10,
+        "save_regardless_of_date"       : true
     },
     "file": {
         "file_date_format"              : "%Y-%m-%d",

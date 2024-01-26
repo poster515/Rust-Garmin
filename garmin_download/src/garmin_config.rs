@@ -23,6 +23,7 @@ pub struct DataConfig {
     pub hydration_start_date: String,
     pub activity_start_date: String,
     pub download_today_data: bool,
+    pub num_days_from_start_date: u64
 }
 
 #[derive(Debug, Deserialize, Default)]

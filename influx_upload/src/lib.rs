@@ -379,7 +379,7 @@ impl UploadManager {
             }
             match data.build() {
                 Ok(datapoint) => { datapoints.push(datapoint); },
-                Err(e) => { warn!("Unable to build datapoint for record {}, error: {}", kind, e); }
+                Err(_) => {}
             }
         }
 
