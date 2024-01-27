@@ -6,9 +6,11 @@ This repo contains libraries for downloading JSON and FIT file data from Garmin,
 InfluxDB PoC:
 <img width="959" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/f67db956-d9e6-440d-bf02-7dd243ba9836">
 
-Grafana PoC:
+Grafana PoC (Monitoring i.e., Heart Rate):
 <img width="957" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/f778c765-ecf6-4423-9022-7293ec74ca9a">
 
+Grafana PoC (Activities):
+<img width="864" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/57ece55b-930c-4998-985a-c11a789dfda1">
 
 ### Basic Configs
 
