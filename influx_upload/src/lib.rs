@@ -11,7 +11,7 @@ use futures::stream;
 use config::Config;
 use log::{info, error, warn};
 use influxdb2::{Client, ClientBuilder};
-use influxdb2::models::data_point::DataPoint;
+use influxdb2::models::data_point::{DataPoint, DataPointBuilder};
 use regex::Regex;
 
 mod influxdb_structs;
@@ -148,9 +148,9 @@ impl UploadManager {
                             let timestamp = self.garmin_ts_to_nanos_since_epoch(activity_data["startTimeLocal"].as_str().unwrap());
 
                             let mut data = DataPoint::builder("activity_summary")
-                                .tag("activity",                    activity["activityTypeDTO"]["typeKey"].to_string())
-                                .field("name",                      activity["activityName"].to_string())
-                                .field("activityId",                activity["activityId"].to_string());
+                                .tag("activity",                    activity["activityTypeDTO"]["typeKey"].to_string().replace('"', ""))
+                                .field("name",                      activity["activityName"].to_string().replace('"', ""))
+                                .field("activityId",                activity["activityId"].to_string().replace('"', ""));
 
                             if let Some(float) = self.search_for_float(activity_data, "activityTrainingLoad") { data = data.field("activityTrainingLoad", float); }
                             if let Some(float) = self.search_for_float(activity_data, "anaerobicTrainingEffect") { data = data.field("anaerobicTrainingEffect", float); }
@@ -306,7 +306,6 @@ impl UploadManager {
         }
     }
 
-    #[allow(dead_code)]
     fn examine_fit_file_records(&self, filename: &str){
         // use this to print all fields in all records in a fit file. just prints them to screen.
         let mut fp = File::open(filename).unwrap();
@@ -330,23 +329,22 @@ impl UploadManager {
             }
         }
 
-        for (rec_type, field_names) in record_map { warn!("{}: {:?}", rec_type, field_names); }
+        for (rec_type, field_names) in record_map { println!("{}: {:?}", rec_type, field_names); }
     }
 
     fn parse_fit_file(&mut self, filename: &str, measurement: &str, tags: Option<Vec<(String, String)>>){
         let mut fp = File::open(filename).unwrap();
-        let mut datapoints: Vec<DataPoint> = Vec::new();
+        let mut builders: Vec<DataPointBuilder> = Vec::new();
         let mut activity: Option<String> = None;
         let records_to_include: Vec<String> = serde_json::from_value(self.influx_config.records_to_include.clone()).unwrap();
         let mut last_timestamp: HashMap<String, i64> = HashMap::new();
-        info!("Attempting to parse binary: {}", filename);
 
         for record in fitparser::from_reader(&mut fp).unwrap() {
             let kind: &str = &record.kind().to_string();
 
-            if kind == "sport" {
+            if kind == "sport" || kind == "session" {
                 for field in record.into_vec() {
-                    if field.name() == "name" {
+                    if field.name() == "sport" {
                         activity = Some(field.value().to_string());
                         break;
                     }
@@ -358,8 +356,7 @@ impl UploadManager {
             if !records_to_include.contains(&kind.to_string()) { continue; }
 
             let mut data = DataPoint::builder(measurement);
-            if let Some(ref t) = tags { for (tag, value) in t { data = data.tag(tag, value); }}
-            if let Some(ref activity_name) = activity { data = data.tag("activityName", activity_name); }
+            if let Some(ref t) = tags { for (tag, value) in t { data = data.tag(tag.replace('"', ""), value.replace('"', "")); }}
 
             for field in record.into_vec() {
                 // grab the timestamp.
@@ -402,9 +399,27 @@ impl UploadManager {
                     }
                 }
             }
-            match data.build() {
-                Ok(datapoint) => { datapoints.push(datapoint); },
+            builders.push(data);
+        }
+
+        let mut datapoints: Vec<DataPoint> = Vec::new();
+        for mut builder in builders {
+            match activity {
+                Some(ref activity_name) => { 
+                    builder = builder.tag("activityName", activity_name);
+                }, None => { }
+            }
+            match builder.build() {
+                Ok(dp) => { datapoints.push(dp); },
                 Err(_) => {}
+            }
+        }
+
+        match activity {
+            None => { warn!("Unable to locate sport name for file {}, retrieving all records -> field combos...", filename);
+                self.examine_fit_file_records(filename);
+            }, Some(activity_name) => {
+                info!("Successfully parsed binary file: {}, activityName: {}", filename, activity_name);
             }
         }
 
