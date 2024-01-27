@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import date
 from datetime import timedelta
 import subprocess
@@ -7,6 +8,19 @@ import json
 
 if __name__ == '__main__':
     # run this script at 5am to download/upload previous day of data.
+
+    # first argument needs to be the absolute path of this repo folder, otherwise it must
+    # be executed from within the repo folder. This impacts cron for example, which executes
+    # scripts from within the users home folder and messes up all the file paths for various 
+    # config files.
+    if len(sys.argv) > 1:
+        os.chdir(sys.argv[1])
+
+    # remove the session file in case the expiration date is more than 1 day
+    try:
+        os.remove(".garmin_session.json")
+    except FileNotFoundError:
+        pass
 
     # need to set 'download_today_data' to false in garmin_config.json!
     # also make sure that 'num_days_from_start_date' is set to correct 
