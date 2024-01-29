@@ -1,0 +1,20 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      rust: 1.70
+  pre_build:
+    commands:
+      - git clone git@github.com:poster515/Rust-Garmin.git
+  build:
+    commands:
+      - cd ./Rust-Garmin
+      - cargo build
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - cargo test
+artifacts:
+  files:
+    - target/debug/garmin
