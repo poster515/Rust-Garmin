@@ -30,14 +30,16 @@ const GARMIN_POSITION_FACTOR: f64 = 11930465.0;
 // Class for downloading health data from Garmin Connect.
 pub struct UploadManager {
     influx_config: InfluxDbConfig,
-    influx_client: Option<Client>
+    influx_client: Option<Client>,
+    runtime: tokio::runtime::Runtime
 }
 
 impl UploadManager {
     pub fn new(config: Config) -> UploadManager {
         UploadManager {
             influx_config: config.try_deserialize().unwrap(),
-            influx_client: None
+            influx_client: None,
+            runtime: tokio::runtime::Runtime::new().unwrap()
         }
     }
 
@@ -92,9 +94,8 @@ impl UploadManager {
     fn write_data(&mut self, data: Vec<DataPoint>) -> bool {
         match self.influx_client.as_ref() {
             Some(client) => {
-                let rt = tokio::runtime::Runtime::new().unwrap();
                 let num = data.len();
-                let future = rt.block_on({
+                let future = self.runtime.block_on({
                     client.write(&self.influx_config.bucket, stream::iter(data))
                 });
 
@@ -306,8 +307,7 @@ impl UploadManager {
         }
     }
 
-    #[allow(dead_code)]
-    fn examine_fit_file_records(&self, filename: &str){
+    pub fn examine_fit_file_records(&self, filename: &str){
         // use this to print all fields in all records in a fit file. just prints them to screen.
         let mut fp = File::open(filename).unwrap();
         let mut record_map: HashMap<String, HashSet<String>> = HashMap::new();

@@ -48,6 +48,20 @@ fn build_options() -> Options {
         "download date for activity data",
         "use YYY-MM-DD format");
 
+    options.optopt("e",
+        "examine_file",
+        "examines and prints records/field info for FIT file",
+        "should be relative to file_base_path config");
+
+    options.optopt("d",
+        "download_activity",
+        "ID of activity to download",
+        "saves FIT and json files in <file_base_path>/activities");
+    
+    options.optflag("",
+        "print_activity_ids",
+        "print all known activity IDs");
+
     options.optflag("h", 
         "help", 
         "print this help menu");
@@ -101,44 +115,60 @@ fn main() -> Result<(), Error> {
             return Err(error)
         }
     }
-    
-    if matches.opt_present("disable_download") {
-        info!("Not downloading any garmin data");
-    } else {
-        let handle = Config::builder().add_source(File::new(cwd.join("config").join("garmin_config.json").to_str().unwrap(), FileFormat::Json)).build();
-        match handle {
-            Ok(config) => {
-                info!("Successfully loaded garmin config! Executing any configured downloads...");
-                
-                // login and download all configured stats
-                let mut download_manager = DownloadManager::new(config, Some(matches.clone()));
+
+    let handle = Config::builder().add_source(File::new(cwd.join("config").join("garmin_config.json").to_str().unwrap(), FileFormat::Json)).build();
+    match handle {
+        Ok(config) => {
+            info!("Successfully loaded garmin config! Executing any configured downloads...");
+            
+            // login and download all configured stats
+            let mut download_manager = DownloadManager::new(config, Some(matches.clone()));
+            if matches.opt_present("disable_download") {
+                info!("Not downloading any garmin data");
+            } else {
                 download_manager.login();
                 download_manager.download_all();
-            },
-            Err(error) => {
-                error!("Error loading garmin config: {:}", error);
-                return Err(Into::into(error))
             }
+
+            if let Ok(Some(id)) = matches.opt_get::<String>("d") {
+                info!("Attempting to download activity ID {}...", id);
+                download_manager.login();   // should be able to call this twice - client looks for session file
+                download_manager.get_activity_info(id.to_string().parse::<u64>().unwrap());
+                download_manager.get_activity_details(id.to_string().parse::<u64>().unwrap());
+            }
+        },
+        Err(error) => {
+            error!("Error loading garmin config: {:}", error);
+            return Err(Into::into(error))
         }
     }
 
-    // create config for use with downloader
-    if matches.opt_present("disable_upload") {
-        info!("Not uploading any garmin data");
-    } else {
-        let handle = Config::builder().add_source(File::new(cwd.join("config").join("influxdb_config.json").to_str().unwrap(), FileFormat::Json)).build();
-        match handle {
-            Ok(config) => {
-                info!("Successfully loaded influx config!");
-                
-                // spin up influx publisher and publish data
-                let mut upload_manager = UploadManager::new(config);
+    // create config for use with uploader
+    let handle = Config::builder().add_source(File::new(cwd.join("config").join("influxdb_config.json").to_str().unwrap(), FileFormat::Json)).build();
+    match handle {
+        Ok(config) => {
+            info!("Successfully loaded influx config!");
+            
+            // spin up influx publisher and publish data
+            let mut upload_manager = UploadManager::new(config);
+            if matches.opt_present("disable_upload") {
+                info!("Not uploading any garmin data");
+            } else {
                 upload_manager.upload_all();
-            },
-            Err(error) => {
-                error!("Error loading influxdb config: {:}", error);
-                return Err(Into::into(error))
             }
+
+            if let Ok(Some(filename)) = matches.opt_get::<String>("e") {
+                upload_manager.examine_fit_file_records(&filename);
+            }
+
+            if matches.opt_present("print_activity_ids") {
+                // TODO: complete this function
+                // let _ = upload_manager.get_uploaded_activity_ids();
+            }
+        },
+        Err(error) => {
+            error!("Error loading influxdb config: {:}", error);
+            return Err(Into::into(error))
         }
     }
 
