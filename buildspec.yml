@@ -6,9 +6,12 @@ phases:
       rust: 1.70
   pre_build:
     commands:
-      - git clone git@github.com:poster515/Rust-Garmin.git
+      - pwd
+      - ls -la 
   build:
     commands:
+      - pwd
+      - ls -la 
       - cd ./Rust-Garmin
       - cargo build
   post_build:
