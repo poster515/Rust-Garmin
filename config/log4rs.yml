@@ -6,7 +6,7 @@ appenders:
 
   garmin:
     kind: rolling_file
-    path: "/var/log/requests.log"
+    path: /var/log/requests.log
     encoder:
       pattern: "{d} - {m}{n}"
     policy:
@@ -15,7 +15,7 @@ appenders:
         limit: 30 mb
       roller:
         kind: fixed_window
-        pattern: logs/step/step_{}.gz
+        pattern: /var/log/step_{}.gz
         count: 5
         base: 1
 

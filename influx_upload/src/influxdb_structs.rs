@@ -12,5 +12,6 @@ pub struct InfluxDbConfig {
     pub upload_json_files : bool,
     pub upload_fit_files  : bool,
     pub records_to_include: Value,
-    pub files_to_prune: Value
+    pub files_to_prune: Value,
+    pub override_activites: bool
 }

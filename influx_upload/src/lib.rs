@@ -44,8 +44,11 @@ impl UploadManager {
     }
 
     pub fn upload_all(&mut self) {
+        // first get set of all previously uploaded activity IDs
+        let previous_activity_ids = self.get_previous_activity_ids();
+
         if self.influx_config.upload_json_files {
-            self.upload_activity_info();
+            self.upload_activity_info(&previous_activity_ids);
             self.upload_heart_rate_data();
             self.upload_summary_data();
             self.upload_weight_data();
@@ -56,7 +59,7 @@ impl UploadManager {
 
         if self.influx_config.upload_fit_files {
             self.upload_monitoring();
-            self.upload_activity_details();
+            self.upload_activity_details(&previous_activity_ids);
         } else {
             info!("Ignoring FIT file uploads");
         }
@@ -87,6 +90,31 @@ impl UploadManager {
             Err(e) => { 
                 error!("Unable to create client with:\nurl: {}\norg: {}\ntoken: {}\nerror: {}", url, org, token, e); 
                 false
+            }
+        }
+    }
+
+    fn get_previous_activity_ids(&mut self) -> Vec<String>{
+        match self.influx_client.as_ref() {
+            Some(client) => {
+                let future = self.runtime.block_on({
+                    client.list_measurement_tag_values(
+                        &self.influx_config.bucket,
+                        "activity_details",
+                        "activityId",
+                        Some("-1000d"),
+                        None
+                    )
+                });
+
+                match future {
+                    Ok(ids) => { info!("Published {} datapoints!", ids.len()); return ids; },
+                    Err(e) => { error!("Unable to obtain previous activity Ids: {:?}", e); return vec![]; }
+                }
+            }, None => {
+                warn!("InfluxDb client not configured yet!");
+                if !self.build_client() { return vec![]; }
+                return self.get_previous_activity_ids();
             }
         }
     }
@@ -129,7 +157,7 @@ impl UploadManager {
         }
     }
 
-    fn upload_activity_info(&mut self) {
+    fn upload_activity_info(&mut self, prev_ids: &Vec<String>) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("activities");
         if !folder.exists() {
@@ -145,12 +173,20 @@ impl UploadManager {
                             let reader = BufReader::new(file);
                             let activity: HashMap<String, serde_json::Value> = serde_json::from_reader(reader).unwrap();
                             let activity_data = &activity["summaryDTO"];
+                            let activity_id = &activity["activityId"].to_string().replace('"', "");
 
                             let timestamp = self.garmin_ts_to_nanos_since_epoch(activity_data["startTimeLocal"].as_str().unwrap());
 
+                            if prev_ids.contains(&activity_id){
+                                if !self.influx_config.override_activites {
+                                    info!("Id {} already exists, not overriding...", activity_id);
+                                    continue;
+                                }
+                            }
+
                             let mut data = DataPoint::builder("activity_summary")
                                 .tag("activityName",    activity["activityTypeDTO"]["typeKey"].to_string().replace('"', ""))
-                                .tag("activityId",      activity["activityId"].to_string().replace('"', ""))
+                                .tag("activityId",      activity_id)
                                 .field("name",            activity["activityName"].to_string().replace('"', ""));
 
                             if let Some(float) = self.search_for_float(activity_data, "activityTrainingLoad") { data = data.field("activityTrainingLoad", float); }
@@ -182,7 +218,7 @@ impl UploadManager {
             }
         }
     }
-    fn upload_activity_details(&mut self) {
+    fn upload_activity_details(&mut self, prev_ids: &Vec<String>) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("activities");
         if !folder.exists() {
@@ -196,8 +232,15 @@ impl UploadManager {
                     // we could use the below mapping to filter out fields for certain record kinds,
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_map();
-                    let id = self.get_activity_id_from_filename(&filename);
-                    self.parse_fit_file(&filename, "activity_details", Some(vec![("activityId".to_string(), id)]));
+                    let activity_id = self.get_activity_id_from_filename(&filename);
+                    if prev_ids.contains(&activity_id){
+                        if !self.influx_config.override_activites {
+                            info!("Id {} already exists, not overriding...", activity_id);
+                            continue;
+                        }
+                    }
+
+                    self.parse_fit_file(&filename, "activity_details", Some(vec![("activityId".to_string(), activity_id)]));
                 }
             }
         }

@@ -4,17 +4,18 @@
     "bucket"            : "garmin",
     "token"             : "API_TOKEN",
     "file_base_path"    : "/home/jpost/Documents/garmin_data",
-    "upload_json_files" : false,
+    "upload_json_files" : true,
     "upload_fit_files"  : true,
     "records_to_include": [
         "sleep_level", "sleep_assessment", "hrv_status_summary", 
         "hrv_value", "respiration_rate", "monitoring_hr_data", 
         "monitoring_info", "monitoring", "stress_level",
-        "record", "session", "time_in_zone"
+        "record", "session", "time_in_zone", "lap"
     ],
     "files_to_prune": [
         ".zip",
         ".json",
         ".fit"
-    ]
+    ],
+    "override_activites": false
 }
