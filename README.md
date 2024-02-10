@@ -10,7 +10,8 @@ Grafana PoC (Monitoring i.e., Heart Rate):
 <img width="957" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/f778c765-ecf6-4423-9022-7293ec74ca9a">
 
 Grafana PoC (Activities):
-<img width="864" alt="image" src="https://github.com/poster515/Rust-Garmin/assets/9152510/57ece55b-930c-4998-985a-c11a789dfda1">
+![image](https://github.com/poster515/Rust-Garmin/assets/9152510/e6a4f781-3c9b-43c7-92c3-d25a5740e450)
+
 
 ### Basic Configs
 
