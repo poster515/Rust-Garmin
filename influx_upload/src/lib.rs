@@ -102,7 +102,7 @@ impl UploadManager {
                         &self.influx_config.bucket,
                         "activity_details",
                         "activityId",
-                        Some("-1000d"),
+                        None,
                         None
                     )
                 });

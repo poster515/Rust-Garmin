@@ -24,16 +24,28 @@ Various dates/stats you want to download. Can generally be overridden via comman
 Influxdb login credentials and basic upload behavior. No command line arg overrides yet.
 
 ### Intended Use Case
-This library is intended to provide cron-like downloads on a daily basis, although by editing main.rs you can use it as a simple command line utility. The app is generally configured to query and save those data specified in the garmin_config.json file. Options should generally be pretty obvious, an earnest attempt is made to make filenames as unique but intuitive as possible. For example we could have used UUIDs but that has a filename length consideration, as well as providing no immediately obvious significance.
+This library is intended to provide cron-like downloads on a daily basis, although by editing main.rs you can use it as a simple command line utility for bulk downloads. Examples of both are documented further below. The app is generally configured to query and save those data specified in the garmin_config.json file. Options should generally be pretty obvious, an earnest attempt is made to make filenames as unique but intuitive as possible. For example we could have used UUIDs but that has a filename length consideration, as well as providing no immediately obvious significance.
 
 #### Garmin Download Behavior
 All downloads can be configured via the config/garmin_config.json file. Here, various bools can be set to specify what data to download from which date, and to which root output folder. The data dates for each activity can be explicitly overridden via command line argument, and if specified as an input argument will download that data for that date regardless of json config.
 
-All downloads are placed in subfolders within the file_base_path (e.g., "sleep", "heartrate"). *Downloads will likely fail to save files until those subfolders are made.*
+All downloads are placed in subfolders within the file_base_path (e.g., "sleep", "heartrate"). *Downloads will likely fail to save files until those subfolders are made.* Specifically you will need the following folder structure:
+
+```
+file_base_path
+├── activities
+├── activity_types
+├── day_summary
+├── heartrate
+├── hydration
+├── monitoring
+├── sleep
+└── weight
+```
 
 Downloads can be disabled entirely by passing --disable_downloads as an input argument.
 
-Note that 'download_data_today' is a sort of universal override - it will ONLY download today's data for everything. Even if you specify a date override on the command line, that will be ignored if download_today_data is set to true. With that said, here are CLI overrides for various metrics with download_today_data set to false:
+Note that 'download_data_today' is a sort of universal override - it will ONLY download today's data for everything. Even if you specify a date override on the command line, that will be ignored if download_today_data is set to true (not super useful tbh, since activities are usually synced with garmin backend later in the day). With that said, here are CLI overrides for various metrics with download_today_data set to false:
 ```
     -u, --summary_date use YYY-MM-DD format
                         download date for summary data
@@ -52,7 +64,7 @@ Note that 'download_data_today' is a sort of universal override - it will ONLY d
 ```
 
 #### Upload Behavior
-Right now the intended target is an influxdb server, although this repo should be expanded to target more destinations. Configure the influxDB client via config/influxdb_config.json.
+Right now the intended target is an influxdb server, although this repo should be expanded to target more destinations (help/suggestions wanted!). Configure the influxDB client via config/influxdb_config.json.
 
 Uploads can be disabled entirely by passing --disable_uploads as an input argument.
 
@@ -118,7 +130,7 @@ Now you should have everything to update your influxdb_config.json file:
 
 For almost all monitoring metrics it turns out that the FIT files contain everything you need - the JSON files downloaded are good to have as a reference but don't contain nearly as much info as the FIT files.
 
-In influx you can configure telegraf via UI. Simply specify what things you want telegraf to monitor and the influx UI will generate a telegraf.conf for you. Copy and pastet that into the /etc/metrics/telegraf/telegraf.conf file from earlier, and insert your API token in the influxdb section.
+In influx you can configure telegraf via UI. Simply specify what things you want telegraf to monitor and the influx UI will generate a telegraf.conf for you. Copy and pastet that into the /etc/metrics/telegraf/telegraf.conf file from earlier, and insert your API token in the influxdb section. I use telegraf to monitor my home server CPU and memory usage, and have created grafana alerts when those spike beyond certain thresholds (don't want anyone mining bitcoin on my hardware, lol).
 
 Configuring grafana is also fairly straight forward. I configured mine using the FluxQL UI, using only the API token generated from the influx UI. Currently I have yet to do more with grafana but will hopefully update this doc if I do.
 
@@ -131,7 +143,9 @@ Use the following flow to understand how activity details are actually saved:
 - If 'save_regardless_of_date' is false, only activities from midnight on activity_start_date to midnight the next day will be saved.
 - Else, the activity is by default saved to file.
 
-Saving activities based on date is hard since there is no endpoint (to my knowledge) that searches for activities by date. You can download the N activities from activity_start_date. One option to download summaries for a large number activities, whose dates can be checked for correctness. One other future option might be to save activity summaries to influx and then directly expose the garmin_client to save activities by ID, but this is not currently implemented.
+From a data model perspective, the activity summaries are uploaded first to influx - these are simple json files containing a summary of the activity. This is uploaded as a single data point for measurement 'activity_summary', tagged with the activity name and ID. Then the actual FIT file is parsed and uploaded; each data point uploaded from the FIT file is associated with measurement 'activity_details' and is tagged with the same activity ID. This is done to optimize activity ID queries, which only look at 'activity_summary' measurements and not every data point of every 'activity_details' measurement. Specifically, I use this to populate variables in my grafana dashboard.
+
+Saving activities based on date is hard since there is no endpoint (to my knowledge) that searches for activities by date. You can download the N activities from activity_start_date. One option to download summaries for a large number activities, whose dates can be checked for correctness. One feature that was added is a query for all currently saved activity_ids - if a downloaded activity already exists in influx then it will not be re-uploaded, unless overridden via 'override_activites' config arg.
 
 ### Daily Usage (e.g., cron job)
 I would recommend choosing a reasonable value (e.g., 10) to fetch info for activities, unles you think you'll be saving more than activities in one day, in which case you're crazy. Sample configs for daily download of yesterday's data:
