@@ -133,28 +133,28 @@ impl DownloadManager {
     }
 
     /// Downloads all data enabled in config provided in 'new()'
-    pub fn download_all(&mut self) {
+    pub async fn download_all(&mut self) {
         if self.garmin_config.enabled_stats.activities {
             let num_activities = self.garmin_config.activities.num_activities_to_download.parse::<u32>().unwrap();
-            self.get_activity_summaries(num_activities);
+            self.get_activity_summaries(num_activities).await;
         }
         if self.garmin_config.enabled_stats.sleep {
-            self.get_sleep();
+            self.get_sleep().await;
         }
         if self.garmin_config.enabled_stats.rhr {
-            self.get_resting_heart_rate();
+            self.get_resting_heart_rate().await;
         }
         if self.garmin_config.enabled_stats.weight {
-            self.get_weight();
+            self.get_weight().await;
         }
         if self.garmin_config.enabled_stats.daily_summary {
-            self.get_summary_day();
+            self.get_summary_day().await;
         }
         if self.garmin_config.enabled_stats.monitoring {
-            self.monitoring();
+            self.monitoring().await;
         }
         if self.garmin_config.enabled_stats.hydration {
-            self.get_hydration();
+            self.get_hydration().await;
         }
     }
 
@@ -165,7 +165,7 @@ impl DownloadManager {
     /// Retrives user profile, which includes fields like displayName and fullName.
     ///
     /// User can retrieve full response text via self.get_last_resp_text() if needed.
-    pub fn get_user_profile(&mut self){
+    pub async fn get_user_profile(&mut self){
 
         // check session file for displayName and fullName
         // if session file exists: open, append, save user profile info
@@ -188,7 +188,7 @@ impl DownloadManager {
         }
 
         // response will contain displayName and fullName
-        self.garmin_client.api_request(&self.garmin_user_profile_url, None, true, None);
+        self.garmin_client.api_request(&self.garmin_user_profile_url, None, true, None).await;
 
         let response_text = self.get_last_resp_text();
         if response_text.len() == 0 {
@@ -227,17 +227,17 @@ impl DownloadManager {
     }
 
     /// Retrieves the user's display name.
-    pub fn get_display_name(&mut self) -> String {
+    pub async fn get_display_name(&mut self) -> String {
         if self.display_name.len() == 0 {
-            self.get_user_profile();
+            self.get_user_profile().await;
         }
         return String::from(&self.display_name);
     }
 
     /// Retrieves the user's full name.
-    pub fn get_full_name(&mut self) -> String {
+    pub async fn get_full_name(&mut self) -> String {
         if self.full_name.len() == 0 {
-            self.get_user_profile();
+            self.get_user_profile().await;
         }
         return String::from(&self.full_name);
     }
@@ -259,7 +259,7 @@ impl DownloadManager {
     }
 
     /// Logs in using the configured username and password.
-    pub fn login(&mut self) {
+    pub async fn login(&mut self) {
         // connect to domain using login url
         let username: &str = &self.garmin_config.credentials.user;
         let password: &str = &self.garmin_config.credentials.password;
@@ -268,16 +268,16 @@ impl DownloadManager {
         debug!("login domain: {}, username: {}, password: {}", domain, username, password);
 
         // login, get OAuth2.0 token, get user profile, and save all to session file
-        self.garmin_client.login(username, password);
-        self.get_user_profile();
+        self.garmin_client.login(username, password).await;
+        self.get_user_profile().await;
     }
 
     /// Retrieves and prints the user's personal info (e.g., userId, birthday, email, etc)
-    pub fn get_personal_info(&mut self) {
+    pub async fn get_personal_info(&mut self) {
         let mut personal_info_endpoint: String = String::from(&self.garmin_connect_user_profile_url);
         personal_info_endpoint.push_str("/personal-information");
 
-        if !self.garmin_client.api_request(&personal_info_endpoint, None, true, None) {
+        if !self.garmin_client.api_request(&personal_info_endpoint, None, true, None).await {
             return
         }
 
@@ -298,19 +298,19 @@ impl DownloadManager {
     }
 
     /// Retrieves the activity: activityId mapping from garmin.
-    pub fn get_activity_types(&mut self) {
+    pub async fn get_activity_types(&mut self) {
         // retrieves all possible activity types from Garmin. Included activityTypeIds for each.
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str("/activityTypes");
         let filename = self.build_file_name("activity_types", None, None, ".json");
-        self.garmin_client.api_request(&endpoint, None, true, filename);
+        self.garmin_client.api_request(&endpoint, None, true, filename).await;
     }
 
     /// Downloads last activity_count JSON summary and associated FIT files.
     ///
     /// If this DownloadManager was configured with 'download_today_data': true
     /// then only those activities that occurred today will be actually saved.
-    pub fn get_activity_summaries(&mut self, activity_count: u32) {
+    pub async fn get_activity_summaries(&mut self, activity_count: u32) {
         // get high level activity summary, each entry contains activity ID that
         // can be used to get more specific info
         if activity_count == 0 {
@@ -323,7 +323,7 @@ impl DownloadManager {
             ("start", "0"),
             ("limit", &count),
         ]);
-        self.garmin_client.api_request(&endpoint, Some(params), true, None);
+        self.garmin_client.api_request(&endpoint, Some(params), true, None).await;
 
         let response_text = self.get_last_resp_text();
         if response_text.len() == 0 {
@@ -361,8 +361,8 @@ impl DownloadManager {
                 }
             }
 
-            self.get_activity_info(id.to_string().parse::<u64>().unwrap());
-            self.get_activity_details(id.to_string().parse::<u64>().unwrap());
+            self.get_activity_info(id.to_string().parse::<u64>().unwrap()).await;
+            self.get_activity_details(id.to_string().parse::<u64>().unwrap()).await;
         }
     }
 
@@ -371,7 +371,7 @@ impl DownloadManager {
     /// While this DownloadManager provides a progammatic way of doing 
     /// this, you can go to your activity on the garmin connect website,
     /// get the id via the url, and provide that ID to this function.
-    pub fn get_activity_info(&mut self, activity_id: u64) {
+    pub async fn get_activity_info(&mut self, activity_id: u64) {
         // Given specific activity ID, retrieves all basic info as json response body
         let mut endpoint: String = String::from(&self.garmin_connect_activity_service_url);
         endpoint.push_str(&format!("/{}", activity_id));
@@ -380,7 +380,7 @@ impl DownloadManager {
         info!("Getting info for activity {:}", &activity_id);
 
         let filename = self.build_file_name("activities", None, Some(vec![activity_id.to_string()]), ".json");
-        self.garmin_client.api_request(&endpoint, None, true, filename);
+        self.garmin_client.api_request(&endpoint, None, true, filename).await;
     }
 
     /// Downloads FIT file for a particular activity ID. 
@@ -388,7 +388,7 @@ impl DownloadManager {
     /// While this DownloadManager provides a progammatic way of doing 
     /// this, you can go to your activity on the garmin connect website,
     /// get the id via the url, and provide that ID to this function.
-    pub fn get_activity_details(&mut self, activity_id: u64) {
+    pub async fn get_activity_details(&mut self, activity_id: u64) {
         // activity data downloaded as a zip file containing the fit file.
         let mut endpoint: String = String::from(&self.garmin_connect_download_service_url);
         endpoint.push_str(&format!("/activity/{}", activity_id));
@@ -397,11 +397,11 @@ impl DownloadManager {
         info!("Getting details for activity {:}", &activity_id);
 
         let filename = self.build_file_name("activities", None, Some(vec![activity_id.to_string()]), ".zip");
-        self.garmin_client.api_request(&endpoint, None, false, filename);
+        self.garmin_client.api_request(&endpoint, None, false, filename).await;
     }
 
     /// Downloads FIT file info for the configured monitoring date.
-    pub fn monitoring(&mut self) {
+    pub async fn monitoring(&mut self) {
         // monitoring data downloaded as a zip file containing the fit file.
         for i in 0..self.garmin_config.data.num_days_from_start_date {
             let date = self.get_download_date(&self.garmin_config.data.monitoring_start_date, i);
@@ -410,17 +410,17 @@ impl DownloadManager {
             endpoint.push_str(&format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
             
             let filename = self.build_file_name("monitoring", Some(date), None, ".zip");
-            self.garmin_client.api_request(&endpoint, None, false, filename);
+            self.garmin_client.api_request(&endpoint, None, false, filename).await;
         }
     }
 
     /// Downloads sleep info as JSON file, for the configured sleep date.
-    pub fn get_sleep(&mut self) {
+    pub async fn get_sleep(&mut self) {
         for i in 0..self.garmin_config.data.num_days_from_start_date {
             let date = self.get_download_date(&self.garmin_config.data.sleep_start_date, i);
             let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
             let mut endpoint: String = String::from(&self.garmin_connect_sleep_daily_url);
-            endpoint.push_str(&format!("/{}", &self.get_display_name()));
+            endpoint.push_str(&format!("/{}", &self.get_display_name().await));
 
             let params = HashMap::from([
                 ("date", date_str.as_str()),
@@ -428,17 +428,17 @@ impl DownloadManager {
             ]);
 
             let filename = self.build_file_name("sleep", Some(date), None, ".json");
-            self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+            self.garmin_client.api_request(&endpoint, Some(params), true, filename).await;
         }
     }
 
     /// Downloads resting heart rate info as JSON file, for the configured date.
-    pub fn get_resting_heart_rate(&mut self) {
+    pub async fn get_resting_heart_rate(&mut self) {
         for i in 0..self.garmin_config.data.num_days_from_start_date {
             let date = self.get_download_date(&self.garmin_config.data.rhr_start_date, i);
             let date_str = String::from(format!("{}", date.format("%Y-%m-%d"))).replace('"', "");
             let mut endpoint = String::from(&self.garmin_connect_rhr);
-            endpoint.push_str(&format!("/{}", &self.get_display_name()));
+            endpoint.push_str(&format!("/{}", &self.get_display_name().await));
 
             let params = HashMap::from([
                 ("fromDate", date_str.as_str()),
@@ -446,12 +446,12 @@ impl DownloadManager {
                 ("metricId", "60")
             ]);
             let filename = self.build_file_name("heartrate", Some(date), None, ".json");
-            self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+            self.garmin_client.api_request(&endpoint, Some(params), true, filename).await;
         }
     }
 
      /// Downloads weight info as JSON file, for the configured date.
-    pub fn get_weight(&mut self) {
+    pub async fn get_weight(&mut self) {
         for i in 0..self.garmin_config.data.num_days_from_start_date {
             let date = self.get_download_date(&self.garmin_config.data.weight_start_date, i);
             let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
@@ -464,14 +464,14 @@ impl DownloadManager {
                         ("_", &epoch_millis.as_str())
                     ]);
                     let filename = self.build_file_name("weight", Some(date), None, ".json");
-                    self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+                    self.garmin_client.api_request(&endpoint, Some(params), true, filename).await;
                 }, Err(_) => {}
             }
         }
     }
 
      /// Downloads summary info as JSON file, for the configured date.
-    pub fn get_summary_day(&mut self) {
+    pub async fn get_summary_day(&mut self) {
         for i in 0..self.garmin_config.data.num_days_from_start_date {
             let date = self.get_download_date(&self.garmin_config.data.summary_date, i);
             let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
@@ -479,14 +479,14 @@ impl DownloadManager {
                 Ok(epoch_millis) => {
 
                     let mut endpoint = String::from(&self.garmin_connect_daily_summary_url);
-                    endpoint.push_str(&format!("/{}", &self.get_display_name()));
+                    endpoint.push_str(&format!("/{}", &self.get_display_name().await));
 
                     let params = HashMap::from([
                         ("calendarDate", date_str.as_str()),
                         ("_", epoch_millis.as_str())
                     ]);
                     let filename = self.build_file_name("day_summary", Some(date), None, ".json");
-                    self.garmin_client.api_request(&endpoint, Some(params), true, filename);
+                    self.garmin_client.api_request(&endpoint, Some(params), true, filename).await;
 
                 }, Err(e) => {
                     warn!("Unable to properly parse date: {}. Error: {}", &date_str, e);
@@ -496,7 +496,7 @@ impl DownloadManager {
     }
 
      /// Downloads hydration info as JSON file, for the configured date.
-    pub fn get_hydration(&mut self) {
+    pub async fn get_hydration(&mut self) {
         for i in 0..self.garmin_config.data.num_days_from_start_date {
             let date = self.get_download_date(&self.garmin_config.data.hydration_start_date, i);
             let date_str = String::from(format!("{}", date.format("%Y-%m-%d")).replace('"', ""));
@@ -505,7 +505,7 @@ impl DownloadManager {
             endpoint.push_str(&format!("/hydration_{}", &date_str));
 
             let filename = self.build_file_name("hydration", Some(date), None, ".json");
-            self.garmin_client.api_request(&endpoint, None, true, filename);
+            self.garmin_client.api_request(&endpoint, None, true, filename).await;
         }
     }
 

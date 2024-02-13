@@ -82,7 +82,8 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     // takes various command line args, runs download once and exits
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -126,15 +127,15 @@ fn main() -> Result<(), Error> {
             if matches.opt_present("disable_download") {
                 info!("Not downloading any garmin data");
             } else {
-                download_manager.login();
-                download_manager.download_all();
+                download_manager.login().await;
+                download_manager.download_all().await;
             }
 
             if let Ok(Some(id)) = matches.opt_get::<String>("d") {
                 info!("Attempting to download activity ID {}...", id);
-                download_manager.login();   // should be able to call this twice - client looks for session file
-                download_manager.get_activity_info(id.to_string().parse::<u64>().unwrap());
-                download_manager.get_activity_details(id.to_string().parse::<u64>().unwrap());
+                download_manager.login().await;   // should be able to call this twice - client looks for session file
+                download_manager.get_activity_info(id.to_string().parse::<u64>().unwrap()).await;
+                download_manager.get_activity_details(id.to_string().parse::<u64>().unwrap()).await;
             }
         },
         Err(error) => {
@@ -154,7 +155,7 @@ fn main() -> Result<(), Error> {
             if matches.opt_present("disable_upload") {
                 info!("Not uploading any garmin data");
             } else {
-                upload_manager.upload_all();
+                upload_manager.upload_all().await;
             }
 
             if let Ok(Some(filename)) = matches.opt_get::<String>("e") {
