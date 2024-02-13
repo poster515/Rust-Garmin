@@ -1,8 +1,8 @@
 
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Serialize)]
 pub struct InfluxDbConfig {
     pub url: String,
     pub org: String,

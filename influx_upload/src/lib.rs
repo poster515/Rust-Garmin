@@ -440,3 +440,89 @@ impl UploadManager {
         self.write_data(datapoints).await;
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+
+    use config::{Config, File, FileFormat};
+    use std::env::current_dir;
+    use crate::UploadManager;
+
+    #[test]
+    fn timestamp_to_nanos_test() {
+        let config = Config::builder().add_source(
+            File::new(
+                current_dir()
+                    .unwrap()
+                    .join("..")
+                    .join("config")
+                    .join("influxdb_config.json")
+                    .to_str()
+                    .unwrap(), 
+                FileFormat::Json))
+            .build()
+            .unwrap();
+        let um = UploadManager::new(config);
+        let good_date = "2024-02-01 00:00:00.000";
+        assert_eq!(um.garmin_ts_to_nanos_since_epoch(good_date), 1706745600000000000);
+    }
+
+    #[test]
+    fn search_for_float_test() {
+        let config = Config::builder().add_source(
+            File::new(
+                current_dir()
+                    .unwrap()
+                    .join("..")
+                    .join("config")
+                    .join("influxdb_config.json")
+                    .to_str()
+                    .unwrap(), 
+                FileFormat::Json))
+            .build()
+            .unwrap();
+        let data: serde_json::Value = serde_json::from_str("{ \"data\": 0.23432 }").unwrap();
+        let key = "data";
+        let um = UploadManager::new(config);
+        assert_eq!(um.search_for_float(&data, key), Some(0.23432));
+    }
+
+    #[test]
+    fn search_for_i64_test() {
+        let config = Config::builder().add_source(
+            File::new(
+                current_dir()
+                    .unwrap()
+                    .join("..")
+                    .join("config")
+                    .join("influxdb_config.json")
+                    .to_str()
+                    .unwrap(), 
+                FileFormat::Json))
+            .build()
+            .unwrap();
+        let data: serde_json::Value = serde_json::from_str("{ \"data\": 1800 }").unwrap();
+        let key = "data";
+        let um = UploadManager::new(config);
+        assert_eq!(um.search_for_i64(&data, key), Some(1800));
+    }
+
+    #[test]
+    fn search_for_file_extension_test() {
+        let config = Config::builder().add_source(
+            File::new(
+                current_dir()
+                    .unwrap()
+                    .join("..")
+                    .join("config")
+                    .join("influxdb_config.json")
+                    .to_str()
+                    .unwrap(), 
+                FileFormat::Json))
+            .build()
+            .unwrap();
+        let um = UploadManager::new(config);
+        assert_eq!(um.get_extension_from_filename("test.json"), Some("json"));
+    }
+}
