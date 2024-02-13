@@ -525,4 +525,40 @@ mod tests {
         let um = UploadManager::new(config);
         assert_eq!(um.get_extension_from_filename("test.json"), Some("json"));
     }
+
+    #[test]
+    fn get_activity_id_from_filename_test() {
+        let config = Config::builder().add_source(
+            File::new(
+                current_dir()
+                    .unwrap()
+                    .join("..")
+                    .join("config")
+                    .join("influxdb_config.json")
+                    .to_str()
+                    .unwrap(), 
+                FileFormat::Json))
+            .build()
+            .unwrap();
+        let um = UploadManager::new(config);
+        assert_eq!(um.get_activity_id_from_filename("./1234_ACTIVITY.fit"), "1234");
+    }
+
+    #[test]
+    fn get_monitoring_metric_from_filename_test() {
+        let config = Config::builder().add_source(
+            File::new(
+                current_dir()
+                    .unwrap()
+                    .join("..")
+                    .join("config")
+                    .join("influxdb_config.json")
+                    .to_str()
+                    .unwrap(), 
+                FileFormat::Json))
+            .build()
+            .unwrap();
+        let um = UploadManager::new(config);
+        assert_eq!(um.get_monitoring_metric_from_filename("./1234_HRV_STATUS.fit"), "HRV_STATUS");
+    }
 }
