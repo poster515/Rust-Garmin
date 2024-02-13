@@ -40,8 +40,7 @@ pub struct GarminClient {
     last_sso_resp_text: String,
     last_api_resp_url: String,
     last_api_resp_text: String,
-    oauth_manager: auth::GaminOAuthManager,
-    runtime: tokio::runtime::Runtime
+    oauth_manager: auth::GaminOAuthManager
 }
 
 impl GarminClient {
@@ -55,8 +54,7 @@ impl GarminClient {
             last_sso_resp_text: String::new(),
             last_api_resp_url: String::new(),
             last_api_resp_text: String::new(),
-            oauth_manager: auth::GaminOAuthManager::new(),
-            runtime: tokio::runtime::Runtime::new().unwrap()
+            oauth_manager: auth::GaminOAuthManager::new()
         }
     }
 
@@ -90,7 +88,7 @@ impl GarminClient {
         ub
     }
 
-    fn set_cookie(&mut self) -> bool {
+    async fn set_cookie(&mut self) -> bool {
         /*
         Called before actual login so we can get csrf token.
         */
@@ -108,34 +106,25 @@ impl GarminClient {
         debug!("Requesting url: {}", url);
         debug!("====================================================");
 
-        let future = self.runtime.block_on(self.client.get(&url).send());
-
-        let response = future.unwrap();
+        let response = self.client.get(&url).send().await.unwrap();
         self.last_sso_resp_url = response.url().to_string();
-
-        let get_body_future = self.runtime.block_on(response.text());
-        self.last_sso_resp_text = get_body_future.unwrap();
+        self.last_sso_resp_text = response.text().await.unwrap();
         true
     }
 
-    fn get_csrf_token(&mut self) -> String {
+    async fn get_csrf_token(&mut self) -> String {
 
         let url = self.build_auth_url(vec!["sso", "signin"]);
         let mut headers = HeaderMap::new();
         headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
 
-        let future = self.runtime.block_on(self.client.get(&url).headers(headers).send());
-
-        let response = future.unwrap();
+        let response = self.client.get(&url).headers(headers).send().await.unwrap();
         self.last_sso_resp_url = response.url().to_string();
-
-        let get_body_future = self.runtime.block_on(response.text());
-
-        self.last_sso_resp_text = get_body_future.unwrap();
+        self.last_sso_resp_text = response.text().await.unwrap();
         self.parse_csrf_token(&self.last_sso_resp_text)
     }
 
-    fn submit_login(&mut self, username: &str, password: &str, csrf_token: &str) -> bool {
+    async fn submit_login(&mut self, username: &str, password: &str, csrf_token: &str) -> bool {
         let url = self.build_auth_url(vec!["sso", "signin"]);
         let mut headers = HeaderMap::new(); 
         headers.insert("referer", self.last_sso_resp_url.as_str().parse().unwrap());
@@ -147,18 +136,13 @@ impl GarminClient {
             ("_csrf", String::from(csrf_token))
         ]);
 
-        let future = self.runtime.block_on({
-            self.client.post(&url)
-                .headers(headers)
-                .form(&form)
-                .send()
-        });
+        let response = self.client.post(&url)
+            .headers(headers)
+            .form(&form)
+            .send().await.unwrap();
 
-        let response = future.unwrap();
         self.last_sso_resp_url = response.url().to_string();
-
-        let get_body_future = self.runtime.block_on(response.text());
-        self.last_sso_resp_text = get_body_future.unwrap();
+        self.last_sso_resp_text = response.text().await.unwrap();
         true
     }
 
@@ -216,20 +200,20 @@ impl GarminClient {
 
     /// The first main interface - requires just a username and password,
     /// and obtains an OAuth2.0 access token.
-    pub fn login(&mut self, username: &str, password: &str) -> () {
+    pub async fn login(&mut self, username: &str, password: &str) -> () {
         // if we have a valid token then continue to use it
         if self.retrieve_json_session() {
             return;
         }
 
         // set cookies
-        if !self.set_cookie() {
+        if !self.set_cookie().await {
             error!("Unable to set session, cannot proceed with authentication");
             return
         }
 
         // get csrf token
-        let csrf_token: String = self.get_csrf_token();
+        let csrf_token: String = self.get_csrf_token().await;
         
         if csrf_token.len() == 0 {
             error!("Unable to find CSRF token in response: {}", &self.last_sso_resp_text);
@@ -237,7 +221,7 @@ impl GarminClient {
         }
 
         // Submit login form with email and password
-        self.submit_login(username, password, &csrf_token);
+        self.submit_login(username, password, &csrf_token).await;
         let mut title = self.parse_title(&self.last_sso_resp_text);
         if title.len() == 0 {
             error!("Unable to find 'title' field in response: {}", &self.last_sso_resp_text);
@@ -246,7 +230,7 @@ impl GarminClient {
 
         // handle any MFA for user
         if title.contains("MFA") {
-            self.handle_mfa();
+            self.handle_mfa().await;
             title = self.parse_title(&self.last_sso_resp_text);
         }
 
@@ -260,15 +244,15 @@ impl GarminClient {
             return;
         }
 
-        self.set_oauth1_token(&ticket);
-        if !(self.set_oauth2_token()){
+        self.set_oauth1_token(&ticket).await;
+        if !(self.set_oauth2_token().await){
             return;
         }
         self.save_json_session();
     }
 
-    fn handle_mfa(&mut self) {
-        let csrf_token: String = self.get_csrf_token();
+    async fn handle_mfa(&mut self) {
+        let csrf_token: String = self.get_csrf_token().await;
 
         let mut mfa_code = String::new();
         print!("Enter MFA code: ");
@@ -286,27 +270,25 @@ impl GarminClient {
         ]);
 
         let url = self.build_auth_url(vec!["sso", "verifyMFA", "loginEnterMfaCode"]);
-        let future = self.runtime.block_on({
-            self.client.post(&url)
-                .headers(headers)
-                .form(&form)
-                .send()
-        });
 
-        let response = future.unwrap();
+        let response = self.client.post(&url)
+            .headers(headers)
+            .form(&form)
+            .send()
+            .await
+            .unwrap();
+
         self.last_sso_resp_url = response.url().to_string();
-
-        let get_body_future = self.runtime.block_on(response.text());
-        self.last_sso_resp_text = get_body_future.unwrap();
+        self.last_sso_resp_text = response.text().await.unwrap();
     }
 
-    fn set_oauth1_token(&mut self, ticket: &str) {
-        let oauth1_token: String = self.oauth_manager.set_oauth1_token(ticket, self.client.clone()).unwrap();
+    async fn set_oauth1_token(&mut self, ticket: &str) {
+        let oauth1_token: String = self.oauth_manager.set_oauth1_token(ticket, self.client.clone()).await.unwrap();
         info!("Got oauth1 token: {}", oauth1_token);
     }
 
-    fn set_oauth2_token(&mut self) -> bool {
-        match self.oauth_manager.set_oauth2_token(self.client.clone()) {
+    async fn set_oauth2_token(&mut self) -> bool {
+        match self.oauth_manager.set_oauth2_token(self.client.clone()).await {
             Ok(token) => {
                 info!("Got oauth2 token: {}", token);
                 true
@@ -326,7 +308,7 @@ impl GarminClient {
     /// By specifying filepath=None, the data is not saved to file. JSON text responses
     /// can be retrieved via the get_last_resp_text() method; however binary (i.e., FIT file) 
     /// downloads are dropped if not saved to file currently.
-    pub fn api_request(&mut self, 
+    pub async fn api_request(&mut self, 
             endpoint: &str, 
             params: Option<HashMap<&str, &str>>,
             json_or_binary: bool,
@@ -338,7 +320,7 @@ impl GarminClient {
             info!("====================================================");
             info!("ConnectAPI refreshing OAuth2.0 token...");
             info!("====================================================");
-            self.set_oauth2_token();
+            self.set_oauth2_token().await;
         }
 
         let access_token: String = String::from(&self.oauth_manager.get_oauth2_token().oauth2_token.access_token);
@@ -348,49 +330,28 @@ impl GarminClient {
         let mut headers = HeaderMap::new();
         headers.insert("Authorization", format!("Bearer {}", access_token).parse().unwrap());
 
-        let future = self.runtime.block_on({
-            let builder = self.client.get(url).headers(headers);
+        let mut builder = self.client.get(url).headers(headers);
 
-            match params {
-                Some(param_map) => {
-                    builder.query(&param_map).send()
-                },
-                None => {
-                    builder.send()
-                }
+        match params {
+            Some(param_map) => {
+                builder = builder.query(&param_map);
+            },
+            None => {}
+        }
+
+        let response = builder.send().await.unwrap();
+
+        if json_or_binary {
+            self.last_api_resp_url = response.url().to_string();
+            self.last_api_resp_text = response.text().await.unwrap();
+            match filepath {
+                Some(filename) => { self.save_as_json(&self.last_api_resp_text, filename); true },
+                None => { debug!("Got api response: {}", &self.last_api_resp_text[0..min(1024, self.last_api_resp_text.len())]); true }
             }
-        });
-
-        match future {
-            Ok(response) => {
-                if json_or_binary {
-                    self.last_api_resp_url = response.url().to_string();
-                    let get_body_future = self.runtime.block_on({
-                        response.text()
-                    });
-
-                    match get_body_future {
-                        Ok(body) => {
-                            self.last_api_resp_text = body;
-                            match filepath {
-                                Some(filename) => { self.save_as_json(&self.last_api_resp_text, filename); },
-                                None => { debug!("Got api response: {}", &self.last_api_resp_text[0..min(1024, self.last_api_resp_text.len())]); }
-                            }
-                            true
-                        }, Err(e) => {
-                            error!("Error parsing response body: {:?}", e);
-                            false
-                        }
-                    }
-                } else {
-                    match filepath {
-                        Some(filename) => { self.save_as_binary(response, filename); true },
-                        None => { debug!("Got {} bytes of binary response, ignoring", response.content_length().unwrap_or(0)); false }
-                    }
-                }
-            }, Err(e) => {
-                error!("Error on api call: {:?}", e);
-                false
+        } else {
+            match filepath {
+                Some(filename) => { self.save_as_binary(response, filename).await; true },
+                None => { debug!("Got {} bytes of binary response, ignoring", response.content_length().unwrap_or(0)); false }
             }
         }
     }
@@ -415,12 +376,12 @@ impl GarminClient {
         }
     }
 
-    fn save_as_binary(&self, mut response: Response, filepath: String){
+    async fn save_as_binary(&self, mut response: Response, filepath: String){
         // .FIT files are saved as .ZIP files FYI
         let mut num_chunks = 0;
         match File::create(&filepath) {
             Ok(mut file) => {
-                while let Ok(Some(chunk)) = self.runtime.block_on(response.chunk()) {
+                while let Ok(Some(chunk)) = response.chunk().await {
                     match file.write(&chunk){
                         Ok(_) => { num_chunks += 1; info!("Wrote chunk #{} to {}. Size: {}", num_chunks, &filepath, &chunk.len()); },
                         Err(e) => { error!("Error writing chunk #{} to {}, error: {}", num_chunks, &filepath, e); }

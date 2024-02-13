@@ -65,6 +65,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bddcadddf5e9015d310179a59bb28c4d4b9920ad0f11e8e14dbadf654890c9a6"
 
 [[package]]
+name = "async-recursion"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd55a5ba1179988837d24ab4c7cc8ed6efdeff578ede0416b4225a5fca35bd0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -683,38 +694,19 @@ version = "0.1.3"
 dependencies = [
  "anyhow",
  "config",
- "garmin_client 0.1.6",
+ "garmin_client",
  "garmin_download",
  "getopts",
  "influx_upload",
  "log",
  "log4rs",
  "serde_derive",
-]
-
-[[package]]
-name = "garmin_client"
-version = "0.1.6"
-dependencies = [
- "chrono",
- "log",
- "log4rs",
- "regex",
- "reqwest",
- "reqwest-oauth1",
- "serde",
- "serde_json",
  "tokio",
- "url",
- "url-builder",
- "zip",
 ]
 
 [[package]]
 name = "garmin_client"
 version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8da5aebe79f6c517f7fca1866283f42f41efc1cb58ed7c10a1972892291f8cc"
 dependencies = [
  "chrono",
  "log",
@@ -736,7 +728,7 @@ version = "0.1.10"
 dependencies = [
  "chrono",
  "config",
- "garmin_client 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "garmin_client",
  "getopts",
  "log",
  "log4rs",
@@ -1015,6 +1007,7 @@ dependencies = [
 name = "influx_upload"
 version = "0.1.5"
 dependencies = [
+ "async-recursion",
  "bytes",
  "chrono",
  "config",

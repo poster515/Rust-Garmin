@@ -16,7 +16,7 @@
         "hydration_start_date"          : "2023-12-31",
         "activity_start_date"           : "2023-12-31",
         "download_today_data"           : false,
-        "num_days_from_start_date"      : 365
+        "num_days_from_start_date"      : 1
     },
     "activities": {
         "num_activities_to_download"    : 10,
@@ -26,7 +26,7 @@
         "file_date_format"              : "%Y-%m-%d",
         "file_base_path"                : "/home/jpost/Documents/garmin_data",
         "save_to_file"                  : true,
-        "overwrite"                     : true
+        "overwrite"                     : false
     },
     "enabled_stats": {
         "daily_summary"                 : true,

@@ -15,4 +15,5 @@ getopts = "0.2.21"
 garmin_download = { path = "../garmin_download" }
 influx_upload = { path = "../influx_upload" }
 garmin_client = { path = "../garmin_client" }
+tokio = { version = "1", features = ["full"] }
 # otf_client = { path = "../otf_client" }

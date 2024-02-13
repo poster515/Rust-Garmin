@@ -13,6 +13,7 @@ use log::{info, error, warn};
 use influxdb2::{Client, ClientBuilder};
 use influxdb2::models::data_point::DataPoint;
 use regex::Regex;
+use async_recursion::async_recursion;
 
 mod influxdb_structs;
 use influxdb_structs::InfluxDbConfig;
@@ -30,25 +31,23 @@ const GARMIN_POSITION_FACTOR: f64 = 11930465.0;
 // Class for downloading health data from Garmin Connect.
 pub struct UploadManager {
     influx_config: InfluxDbConfig,
-    influx_client: Option<Client>,
-    runtime: tokio::runtime::Runtime
+    influx_client: Option<Client>
 }
 
 impl UploadManager {
     pub fn new(config: Config) -> UploadManager {
         UploadManager {
             influx_config: config.try_deserialize().unwrap(),
-            influx_client: None,
-            runtime: tokio::runtime::Runtime::new().unwrap()
+            influx_client: None
         }
     }
 
-    pub fn upload_all(&mut self) {
+    pub async fn upload_all(&mut self) {
         // first get set of all previously uploaded activity IDs
-        let previous_activity_ids = self.get_previous_activity_ids();
+        let previous_activity_ids = self.get_activity_ids().await;
 
         if self.influx_config.upload_json_files {
-            self.upload_activity_info(&previous_activity_ids);
+            self.upload_activity_info(&previous_activity_ids).await;
             self.upload_heart_rate_data();
             self.upload_summary_data();
             self.upload_weight_data();
@@ -58,8 +57,8 @@ impl UploadManager {
         }
 
         if self.influx_config.upload_fit_files {
-            self.upload_monitoring();
-            self.upload_activity_details(&previous_activity_ids);
+            self.upload_monitoring().await;
+            self.upload_activity_details(&previous_activity_ids).await;
         } else {
             info!("Ignoring FIT file uploads");
         }
@@ -94,47 +93,44 @@ impl UploadManager {
         }
     }
 
-    fn get_previous_activity_ids(&mut self) -> Vec<String>{
+    #[async_recursion]
+    async fn get_activity_ids(&mut self) -> Vec<String>{
         match self.influx_client.as_ref() {
             Some(client) => {
-                let future = self.runtime.block_on({
-                    client.list_measurement_tag_values(
-                        &self.influx_config.bucket,
-                        "activity_details",
-                        "activityId",
-                        None,
-                        None
-                    )
-                });
-
-                match future {
-                    Ok(ids) => { info!("Published {} datapoints!", ids.len()); return ids; },
-                    Err(e) => { error!("Unable to obtain previous activity Ids: {:?}", e); return vec![]; }
-                }
+                let ids = client.list_measurement_tag_values(
+                    &self.influx_config.bucket,
+                    "activity_details",
+                    "activityId",
+                    None,
+                    None
+                )
+                .await
+                .unwrap();
+                
+                info!("Got {} previous activity ids", ids.len());
+                ids
             }, None => {
                 warn!("InfluxDb client not configured yet!");
                 if !self.build_client() { return vec![]; }
-                return self.get_previous_activity_ids();
+                return self.get_activity_ids().await;
             }
         }
     }
 
-    fn write_data(&mut self, data: Vec<DataPoint>) -> bool {
+    #[async_recursion]
+    async fn write_data(&mut self, data: Vec<DataPoint>) -> bool {
         match self.influx_client.as_ref() {
             Some(client) => {
                 let num = data.len();
-                let future = self.runtime.block_on({
-                    client.write(&self.influx_config.bucket, stream::iter(data))
-                });
 
-                match future {
+                match client.write(&self.influx_config.bucket, stream::iter(data)).await {
                     Ok(_) => { info!("Published {} datapoints!", num); return true; },
                     Err(e) => { error!("Unable to write data point(s): {:?}", e); return false; }
                 }
             }, None => {
                 warn!("InfluxDb client not configured yet!");
                 if !self.build_client() { return false; }
-                return self.write_data(data);
+                return self.write_data(data).await;
             }
         }
     }
@@ -157,7 +153,7 @@ impl UploadManager {
         }
     }
 
-    fn upload_activity_info(&mut self, prev_ids: &Vec<String>) {
+    async fn upload_activity_info(&mut self, prev_ids: &Vec<String>) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("activities");
         if !folder.exists() {
@@ -210,7 +206,7 @@ impl UploadManager {
                             if let Some(int) = self.search_for_i64(activity_data, "moderateIntensityMinutes") { data = data.field("moderateIntensityMinutes", int); }
                             if let Some(int) = self.search_for_i64(activity_data, "vigorousIntensityMinutes") { data = data.field("vigorousIntensityMinutes", int); }
 
-                            self.write_data(vec![data.timestamp(timestamp).build().unwrap()]);
+                            self.write_data(vec![data.timestamp(timestamp).build().unwrap()]).await;
 
                         }, Err(e) => { error!("Failed to open file {:?}, error: {}", entry.path(), e); }
                     }
@@ -218,7 +214,8 @@ impl UploadManager {
             }
         }
     }
-    fn upload_activity_details(&mut self, prev_ids: &Vec<String>) {
+
+    async fn upload_activity_details(&mut self, prev_ids: &Vec<String>) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("activities");
         if !folder.exists() {
@@ -240,7 +237,7 @@ impl UploadManager {
                         }
                     }
 
-                    self.parse_fit_file(&filename, "activity_details", Some(vec![("activityId".to_string(), activity_id)]));
+                    self.parse_fit_file(&filename, "activity_details", Some(vec![("activityId".to_string(), activity_id)])).await;
                 }
             }
         }
@@ -329,7 +326,7 @@ impl UploadManager {
         }
     }
 
-    fn upload_monitoring(&mut self) {
+    async fn upload_monitoring(&mut self) {
         let base_path = String::from(&self.influx_config.file_base_path);
         let folder = Path::new(&base_path).join("monitoring");
         if !folder.exists() {
@@ -344,7 +341,7 @@ impl UploadManager {
                     // but for now we'll scrape ALL valid fields and upload to DB. 
                     // let msp_field_mapping: HashMap<&str, HashSet<&str>> = msg_type_map::get_monitoring_map();
                     let monitoring_metric = self.get_monitoring_metric_from_filename(&filename);
-                    self.parse_fit_file(&filename, "monitoring", Some(vec![("metric".to_string(), monitoring_metric)]));
+                    self.parse_fit_file(&filename, "monitoring", Some(vec![("metric".to_string(), monitoring_metric)])).await;
                 }
             }
         }
@@ -376,7 +373,7 @@ impl UploadManager {
         for (rec_type, field_names) in record_map { println!("{}: {:?}", rec_type, field_names); }
     }
 
-    fn parse_fit_file(&mut self, filename: &str, measurement: &str, tags: Option<Vec<(String, String)>>){
+    async fn parse_fit_file(&mut self, filename: &str, measurement: &str, tags: Option<Vec<(String, String)>>){
         let mut fp = File::open(filename).unwrap();
         let mut datapoints: Vec<DataPoint> = Vec::new();
         let records_to_include: Vec<String> = serde_json::from_value(self.influx_config.records_to_include.clone()).unwrap();
@@ -440,6 +437,6 @@ impl UploadManager {
             
         }
 
-        self.write_data(datapoints);
+        self.write_data(datapoints).await;
     }
 }
