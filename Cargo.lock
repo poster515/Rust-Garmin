@@ -706,7 +706,7 @@ dependencies = [
 
 [[package]]
 name = "garmin_client"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "log",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "garmin_download"
-version = "0.1.10"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "config",
