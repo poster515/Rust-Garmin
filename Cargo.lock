@@ -700,6 +700,7 @@ dependencies = [
  "influx_upload",
  "log",
  "log4rs",
+ "otf_client",
  "serde_derive",
  "tokio",
 ]
@@ -1492,6 +1493,22 @@ checksum = "4ed8acf08e98e744e5384c8bc63ceb0364e68a6854187221c18df61c4797690e"
 dependencies = [
  "dlv-list",
  "hashbrown 0.13.2",
+]
+
+[[package]]
+name = "otf_client"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "log",
+ "log4rs",
+ "regex",
+ "reqwest",
+ "reqwest-oauth1",
+ "serde",
+ "serde_json",
+ "url",
+ "url-builder",
 ]
 
 [[package]]
