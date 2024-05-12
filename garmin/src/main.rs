@@ -8,6 +8,7 @@ use getopts::{Options, Matches};
 
 use garmin_download::DownloadManager;
 use influx_upload::UploadManager;
+use otf_client::OtfClient;
 
 fn build_options() -> Options {
     // the presence of any of these options automatically enables
@@ -172,6 +173,8 @@ async fn main() -> Result<(), Error> {
             return Err(Into::into(error))
         }
     }
+
+    OtfClient::new().login("username", "password").await;
 
     Ok(())
 
