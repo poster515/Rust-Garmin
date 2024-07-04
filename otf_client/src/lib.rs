@@ -7,6 +7,7 @@ use log::debug;
 use reqwest::Client;
 use reqwest::header::HeaderMap;
 
+use cognito_srp::SrpClient;
 
 // const SESSION_FILE: &str = ".otf_session.json";
 
@@ -18,6 +19,16 @@ use reqwest::header::HeaderMap;
 // So far I've had to re-use this integer from snooped login sessions and it seems to work. 
 // Really need to figure out how to generate this though.
 const SRP_A: &str = "REALLY_BIG_INTEGER";
+
+// concatenate the user ID at end of this proxy url to get desired functionality.
+const PROXY_URL: &str = "https://api.orangetheory.co/virtual-class/proxy-cors/?url=https://api.orangetheory.co/member/members/";
+
+// need 'Authorization' header key with access token from cognito login
+const ALL_WORKOUTS_URL: &str = "https://api.orangetheory.co/virtual-class/in-studio-workouts";
+
+// need 'Authorization' header key with access token from cognito login, and json payload:
+// {"ClassHistoryUUId":"class-uuid","MemberUUId":"member-uuid"}
+const WORKOUT_SUMMARY_URL: &str = "https://performance.orangetheory.co/v2.4/member/workout/summary";
 
 #[allow(dead_code)]
 pub struct OtfClient {
@@ -50,14 +61,12 @@ impl OtfClient {
         headers.insert("X-Amz-Target", "AWSCognitoIdentityProviderService.InitiateAuth".parse().unwrap());
         headers.insert("X-Amz-User-Agent", "aws-amplify/0.1.x js".parse().unwrap());
         headers.insert("Origin", "https://otlive.orangetheory.com".parse().unwrap());
-        headers.insert("Referer", "https://otlive.orangetheory.com".parse().unwrap());
-        headers.insert("Access-Control-Request-Headers", "content-type,x-amz-target,x-amz-user-agent".parse().unwrap());
-        headers.insert("Access-Control-Request-Method", "POST".parse().unwrap());
+        headers.insert("Referer", "https://otlive.orangetheory.com/".parse().unwrap());
 
         headers
     }
 
-    async fn get_challenge_params(&mut self, email: &str) {
+    async fn get_challenge_params(&mut self, auth_params: HashMap<String, String>) {
         // so far this function works, but SRP_A value is taken from snooped session.
         let auth_url = "https://cognito-idp.us-east-1.amazonaws.com/";
 
@@ -68,12 +77,17 @@ impl OtfClient {
             "ClientId": "65knvqta6p37efc2l3eh26pl5o",
             "ClientMetadata": {},
             "AuthParameters": {
-                "USERNAME": email,
-                "SRP_A": SRP_A
+                "USERNAME": auth_params["USERNAME"],
+                "SRP_A": auth_params["SRP_A"]
             }
         });
 
-        let headers = self.generate_header();
+        debug!("Sending auth request body: {}", serde_json::to_string_pretty(&body).unwrap());
+
+        let mut headers = self.generate_header();
+        headers.insert("Access-Control-Request-Headers", "content-type,x-amz-target,x-amz-user-agent".parse().unwrap());
+        headers.insert("Access-Control-Request-Method", "POST".parse().unwrap());
+
         let response = self.client
             .post(auth_url)
             .headers(headers)
@@ -81,46 +95,36 @@ impl OtfClient {
             .send()
             .await
             .unwrap();
-
-        if response.status() != StatusCode::OK {
-            debug!("Got code {} and API response: {:?}", response.status(), self.last_sso_resp_text);
-        }
-
+        
+        let code = response.status();
         self.last_sso_resp_text = response.text().await.unwrap();
+        if code != StatusCode::OK {
+            let json_response: HashMap<String, Value> = serde_json::from_str(&self.last_sso_resp_text).unwrap();
+            debug!("Got code {} and API response: {:?}", code, serde_json::to_string_pretty(&json_response).unwrap());
+        }
         
     }
 
-    fn generate_password_claim_signature(&self, auth_params: &HashMap<&str, String>) -> String {
-        
-        let device_password: &str = &auth_params["DEVICE_PASSWORD"];
-        let srp_b: &str = &auth_params["SRP_B"];
-        let salt: &str = &auth_params["SALT"];
-        let timestamp: &str = &auth_params["TIMESTAMP"];
-        let secret_block: &str = &auth_params["SECRET_BLOCK"];
-
-        // TODO: finish
-
-        String::new()
-    }
-
-    async fn respond_to_challenge(&mut self, auth_params: &HashMap<&str, String>) {
+    async fn respond_to_challenge(&mut self, challenge_responses: HashMap<String, String>) {
         let auth_url: &str = "https://cognito-idp.us-east-1.amazonaws.com/";
-        let signature: String = self.generate_password_claim_signature(auth_params);
         let body: Value = json!({
             "ChallengeName": "PASSWORD_VERIFIER",
             "ClientId": "65knvqta6p37efc2l3eh26pl5o",
             "ClientMetadata": {},
             "ChallengeResponses": {
-                "USERNAME": "107494a1-d531-4f9e-8f78-da047b4414ce",
+                "USERNAME": challenge_responses["USERNAME"],
                 "DEVICE_KEY": "us-east-1_aaa5a071-ff9f-4839-a99e-6e6c7fed51b3",
-                "PASSWORD_CLAIM_SECRET_BLOCK": auth_params["SALT"],
-                "PASSWORD_CLAIM_SIGNATURE": signature,
-                "TIMESTAMP": "Fri May 10 23:32:24 UTC 2024"
+                "PASSWORD_CLAIM_SECRET_BLOCK": challenge_responses["PASSWORD_CLAIM_SECRET_BLOCK"],
+                "PASSWORD_CLAIM_SIGNATURE": challenge_responses["PASSWORD_CLAIM_SIGNATURE"],
+                "TIMESTAMP": challenge_responses["TIMESTAMP"]
             }
         });
 
+        debug!("Sending challenge response body: {}", serde_json::to_string_pretty(&body).unwrap());
+
         let mut headers = self.generate_header();
         headers.insert("X-Amz-Target", "AWSCognitoIdentityProviderService.RespondToAuthChallenge".parse().unwrap());
+        headers.insert("Content-Type", "application/json".parse().unwrap());
 
         let response = self.client
             .post(auth_url)
@@ -129,30 +133,43 @@ impl OtfClient {
             .send()
             .await
             .unwrap();
-        if response.status() != StatusCode::OK {
-            debug!("Got code {} and API response: {:?}", response.status(), self.last_sso_resp_text);
+
+        let code = response.status();
+        self.last_sso_resp_text = response.text().await.unwrap();
+        if code != StatusCode::OK {
+            let json_response: HashMap<String, Value> = serde_json::from_str(&self.last_sso_resp_text).unwrap();
+            debug!("Got code {} and API response: {:?}", code, serde_json::to_string_pretty(&json_response).unwrap());
         }
 
-        self.last_sso_resp_text = response.text().await.unwrap();
     }
 
     /// The first main interface - requires just a username and password,
-    /// and obtains an OAuth2.0 access token.
+    /// and obtains an API access token.
     pub async fn login(&mut self, email: &str, password: &str) -> () {
         // if we have a valid token then continue to use it
         // if self.retrieve_json_session() {
         //     return;
         // }
-        self.get_challenge_params(email).await;
+        let srp_client = SrpClient::new(
+            email,
+            password,
+            "aaa5a071-ff9f-4839-a99e-6e6c7fed51b3_us-east-1",
+            "65knvqta6p37efc2l3eh26pl5o",
+            None,
+        );
 
-        let json_response: Value = serde_json::from_str(&self.last_sso_resp_text).unwrap();
-        let mut auth_params: HashMap<&str, String> = HashMap::new();
-        auth_params.insert("SALT", json_response["ChallengeParameters"]["SALT"].to_string());
-        auth_params.insert("SECRET_BLOCK", json_response["ChallengeParameters"]["SECRET_BLOCK"].to_string());
-        auth_params.insert("SRP_B", json_response["ChallengeParameters"]["SRP_B"].to_string());
-        auth_params.insert("USERNAME", json_response["ChallengeParameters"]["USERNAME"].to_string());
+        // get challenge from server
+        let auth_params: HashMap<String, String> = srp_client.get_auth_params().unwrap();
+        self.get_challenge_params(auth_params).await;
 
-        self.respond_to_challenge(&auth_params).await;
+        // respond to challenge
+        let json_response: HashMap<String, Value> = serde_json::from_str(&self.last_sso_resp_text).unwrap();
+        let challenge_params: HashMap<String, String> = serde_json::from_value::<HashMap<String, String>>(json_response.get("ChallengeParameters").unwrap().clone())
+            .unwrap()
+            .clone();
+        let challenge_responses = srp_client.process_challenge(challenge_params).unwrap();
+        self.respond_to_challenge(challenge_responses).await;
+
         
         // self.save_json_session();
     }
