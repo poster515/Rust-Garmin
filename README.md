@@ -1,5 +1,17 @@
 ## GarminGearBox
 ![Rust Build](https://github.com/poster515/Rust-Garmin/actions/workflows/rust.yml/badge.svg?branch=main)
+[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/dwyl/esta/issues)
+[![HitCount](https://hits.dwyl.com/poster515/Rust-Garmin.svg)](https://hits.dwyl.com/poster515/Rust-Garmin)
+
+
+garmin_client: ![crates.io](https://img.shields.io/crates/v/garmin_client.svg)
+![](https://img.shields.io/docsrs/garmin_client)<br>
+garmin_download: ![crates.io](https://img.shields.io/crates/v/garmin_download.svg)
+![](https://img.shields.io/docsrs/garmin_download)
+
+
+
+
 
 This repo contains libraries for downloading JSON and FIT file data from Garmin, parsing said files, and uploading data into an InfluxDb server. This is a side project that will likely always be a work in progress.
 
