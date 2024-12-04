@@ -1,5 +1,3 @@
-
-
 use serde::Deserialize;
 
 #[allow(non_snake_case, dead_code)]
@@ -13,7 +11,7 @@ pub struct BioMetricProfile {
     pub lactateThresholdHeartRate: Option<f64>,
     pub activityClass: Option<f64>,
     pub functionalThresholdPower: Option<f64>,
-    pub criticalSwimSpeed: Option<f64>
+    pub criticalSwimSpeed: Option<f64>,
 }
 
 #[allow(non_snake_case, dead_code)]
@@ -25,7 +23,7 @@ pub struct UserInfo {
     pub locale: String,
     pub timeZone: String,
     pub age: u32,
-    pub countryCode: String    
+    pub countryCode: String,
 }
 
 #[allow(non_snake_case, dead_code)]
@@ -38,4 +36,3 @@ pub struct PersonalInfo {
     pub birthDate: String,
     pub gender: String,
 }
-

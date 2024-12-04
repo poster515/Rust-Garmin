@@ -69,8 +69,8 @@ Right now the intended target is an influxdb server, although this repo should b
 
 Uploads can be disabled entirely by passing --disable_uploads as an input argument.
 
-### Influx DB Sample Setup
-In this example, we'll set up a very basic influxDb 2.0 server, along with a grafana server for better visualizations and telegraf for any optional monitoring stats you want.
+### Influx DB Sample Setup (Manual Docker Commands - more hands on)
+In this example, we'll set up a very basic influxDb 2.0 server, along with a grafana server for better visualizations and telegraf for any optional monitoring stats you want. These steps use a much more manual approach, for a simpler docker-compose system 'ready to go' see the next section.
 
 A few basics:
 - everything will be in a docker container. If for some reason you want to run in a tmux/byobu session then you'll have to find equivalent examples online.
@@ -91,7 +91,7 @@ I made a directory structure as follows:
 
 The basic idea is to keep everything related to this project in the same folder: /etc/metrics. You must create the /data and /config subfolder in /influxdb if you want to see you data from the host. Currently I don't, but it feels like a good thing to have available.
 
-I also chose to run a grafan server and telegraf server which is not required at all for this project. We'll configure these after influx is running. 
+I also chose to run a grafana server and telegraf server which is not required at all for this project. We'll configure these after influx is running. 
 
 #### Create Docker Network
 ```
@@ -113,11 +113,20 @@ sudo docker run -d --rm -p 3000:3000 --name=grafana --volume /etc/metrics/grafan
 sudo docker run -d --rm  --name=telegraf -v /etc/metrics/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf --net=influxdb-telegraf-net telegraf
 ```
 
-#### Usage Notes and Thoughts
-I could have made a docker-compose.yml file. Fair. I had to do a fair bit of start, stopping, and removing influx docker containers to get my setup correct so this is the approach I took. Given the relative simplicity of the setup it may not warrant a docker compose file anyway.
-
+#### Notes on the above commands
 Note the each docker container is spawned with ```-d --rm``` flags. These indicate that the docker daemon should 'detach' the container i.e., run it in the background and also to 'remove' the container once it stops. I did this because if you want to startup a new docker influx container, for example, docker will tell you that the named container is already in use.
 
+### Influx DB Sample Setup (use docker-compose, much easier)
+Literally just run
+```
+sudo docker-compose
+```
+Within this folder (would recommend adding a '-d' flag to the above to detach the process). It will create docker volumes, a docker network, and start each service specified above. To restart any particular service simply run
+```
+docker-compose restart <service-name>
+```
+
+### General Usage Notes
 Once the influxdb container is running, you'll need to create a bucket and a few API access tokens. I did this all using the web service running at ```<host IP address>:8086```, specifically 192.168.0.105:8086 for me. My server also uses a static IP so this will never (ideally) change. I then created a bucket called 'garmin' but you do you. Create tokens as specified in the official docs: https://docs.influxdata.com/influxdb/cloud/admin/tokens/create-token/. Create tokens for the following:
 - rust upload client (read and write perms)
 - grafana (only need read perms unless you're doing alerting or something)
@@ -155,7 +164,7 @@ I would recommend choosing a reasonable value (e.g., 10) to fetch info for activ
 - enable the stats you want
 
 ### Historical Download (e.g., bulk download)
-If you wanted to, say, download a large number of historical activities, set the dates in the config file and an appropriate number of days' to download. Let's say you wanted to download the year's worth of *monitoring* data (heart rate, respiration rate, etc) from 2023. Set the following: 
+If you wanted to, say, download a large number of historical activities, set the dates in the config file and an appropriate number of days' to download. Let's say you wanted to download the year's worth of *monitoring* data (ignoring heart rate, respiration rate, etc) from 2023. Set the following: 
 - 'download_today_data': false
 - 'monitor_start_date': '2023-01-01'
 - disable all stats except 'monitoring'

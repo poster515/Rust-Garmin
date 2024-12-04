@@ -1,6 +1,6 @@
 [package]
 name = "garmin_client"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "GPL-3.0"
 description = "Provides an oauth2.0-capable client that interfaces with Garmin"
@@ -18,8 +18,9 @@ tokio = { version = "1.35.1", features = ["full"] }
 log = "0.4.20"
 log4rs = "1.2.0"
 regex = "1.10.2"
-reqwest = { version = "0.11", features = ["blocking", "cookies", "multipart", "json"] }
-reqwest-oauth1 = "0.2.4"
-zip = "0.6"
+hyper-rustls = "0.27.3"
+reqwest = { version = "0.12.9", features = ["blocking", "cookies", "multipart", "json"] }
+reqwest-oauth1 = "0.3.0"
+zip = "2.2.1"
 chrono = "0.4.31"
 serde = "1.0.195"

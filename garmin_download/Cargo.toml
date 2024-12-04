@@ -1,6 +1,6 @@
 [package]
 name = "garmin_download"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "GPL-3.0"
 description = "Provides a DownloadManager struct capable of downloading data directly from Garmin"
@@ -19,4 +19,4 @@ log4rs = "1.2.0"
 chrono = "0.4.31"
 serde_json = "1.0.111"
 getopts = "0.2.21"
-garmin_client = "0.2.0"
+garmin_client = { path = "../garmin_client" }

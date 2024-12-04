@@ -1,0 +1,48 @@
+version: "3.7"
+
+services:
+  influx-service:
+    image: influxdb:2.0
+    networks:
+      - influxdb-telegraf-net
+    container_name: influx
+    ports:
+      - 8086:8086
+    volumes:
+      - type: volume
+        source: influx-volume
+        target: /var/lib/influxdb2
+
+  grafana-service:
+    image: grafana/grafana-enterprise:latest
+    networks:
+      - influxdb-telegraf-net
+    container_name: grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - type: volume
+        source: grafana-volume
+        target: /var/lib/grafana
+    depends_on:
+      - influx-service
+
+  telegraf-service:
+    image: telegraf:latest
+    container_name: telegraf
+    networks:
+      - influxdb-telegraf-net
+    volumes:
+      - type: volume
+        source: telegraf-volume
+        target: /etc/telegraf
+    depends_on:
+      - influx-service
+
+networks:
+  influxdb-telegraf-net:
+
+volumes:
+  telegraf-volume:
+  influx-volume:
+  grafana-volume:

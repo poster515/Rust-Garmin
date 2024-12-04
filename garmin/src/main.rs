@@ -1,10 +1,10 @@
-use std::{env, path::Path};
-use log::{error, info};
 use anyhow::Error;
+use log::{error, info};
+use std::{env, path::Path};
 
 use config::{Config, File, FileFormat};
 
-use getopts::{Options, Matches};
+use getopts::{Matches, Options};
 
 use garmin_download::DownloadManager;
 use influx_upload::UploadManager;
@@ -13,66 +13,76 @@ fn build_options() -> Options {
     // the presence of any of these options automatically enables
     // the download of the associated data
     let mut options = Options::new();
-    options.optopt("u",
+    options.optopt(
+        "u",
         "summary_date",
         "download date for summary data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("w",
+    options.optopt(
+        "w",
         "weight_date",
         "download date for weight data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("s",
+    options.optopt(
+        "s",
         "sleep_date",
         "download date for sleep data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("r",
+    options.optopt(
+        "r",
         "resting_heart_date",
         "download date for resting heart rate data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("o",
+    options.optopt(
+        "o",
         "hydration_date",
         "download date for hydration data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("m",
+    options.optopt(
+        "m",
         "monitor_date",
         "download date for monitoring data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("a",
+    options.optopt(
+        "a",
         "activity_date",
         "download date for activity data",
-        "use YYY-MM-DD format");
+        "use YYY-MM-DD format",
+    );
 
-    options.optopt("e",
+    options.optopt(
+        "e",
         "examine_file",
         "examines and prints records/field info for FIT file",
-        "should be relative to file_base_path config");
+        "should be relative to file_base_path config",
+    );
 
-    options.optopt("d",
+    options.optopt(
+        "d",
         "download_activity",
         "ID of activity to download",
-        "saves FIT and json files in <file_base_path>/activities");
-    
-    options.optflag("",
-        "print_activity_ids",
-        "print all known activity IDs");
+        "saves FIT and json files in <file_base_path>/activities",
+    );
 
-    options.optflag("h", 
-        "help", 
-        "print this help menu");
-    
-    options.optflag("", 
-        "disable_download", 
-        "ignores data download entirely");
-    
-    options.optflag("", 
-        "disable_upload", 
-        "ignores data upload entirely");
+    options.optflag("", "print_activity_ids", "print all known activity IDs");
+
+    options.optflag("h", "help", "print this help menu");
+
+    options.optflag("", "disable_download", "ignores data download entirely");
+
+    options.optflag("", "disable_upload", "ignores data upload entirely");
 
     options
 }
@@ -88,10 +98,12 @@ async fn main() -> Result<(), Error> {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
-    let options = build_options();    
+    let options = build_options();
     let matches: Matches = match options.parse(&args[1..]) {
-        Ok(m) => { m }
-        Err(f) => { panic!("{}", f.to_string()) }
+        Ok(m) => m,
+        Err(f) => {
+            panic!("{}", f.to_string())
+        }
     };
 
     if matches.opt_present("h") {
@@ -110,18 +122,26 @@ async fn main() -> Result<(), Error> {
     match handle {
         Ok(()) => {
             info!("Successfully loaded log config!");
-        },
+        }
         Err(error) => {
             println!("Error loading log config: {:}", error);
-            return Err(error)
+            return Err(error);
         }
     }
 
-    let handle = Config::builder().add_source(File::new(cwd.join("config").join("garmin_config.json").to_str().unwrap(), FileFormat::Json)).build();
+    let handle = Config::builder()
+        .add_source(File::new(
+            cwd.join("config")
+                .join("garmin_config.json")
+                .to_str()
+                .unwrap(),
+            FileFormat::Json,
+        ))
+        .build();
     match handle {
         Ok(config) => {
             info!("Successfully loaded garmin config! Executing any configured downloads...");
-            
+
             // login and download all configured stats
             let mut download_manager = DownloadManager::new(config, Some(matches.clone()));
             if matches.opt_present("disable_download") {
@@ -133,23 +153,35 @@ async fn main() -> Result<(), Error> {
 
             if let Ok(Some(id)) = matches.opt_get::<String>("d") {
                 info!("Attempting to download activity ID {}...", id);
-                download_manager.login().await;   // should be able to call this twice - client looks for session file
-                download_manager.get_activity_info(id.to_string().parse::<u64>().unwrap()).await;
-                download_manager.get_activity_details(id.to_string().parse::<u64>().unwrap()).await;
+                download_manager.login().await; // should be able to call this twice - client looks for session file
+                download_manager
+                    .get_activity_info(id.to_string().parse::<u64>().unwrap())
+                    .await;
+                download_manager
+                    .get_activity_details(id.to_string().parse::<u64>().unwrap())
+                    .await;
             }
-        },
+        }
         Err(error) => {
             error!("Error loading garmin config: {:}", error);
-            return Err(Into::into(error))
+            return Err(Into::into(error));
         }
     }
 
     // create config for use with uploader
-    let handle = Config::builder().add_source(File::new(cwd.join("config").join("influxdb_config.json").to_str().unwrap(), FileFormat::Json)).build();
+    let handle = Config::builder()
+        .add_source(File::new(
+            cwd.join("config")
+                .join("influxdb_config.json")
+                .to_str()
+                .unwrap(),
+            FileFormat::Json,
+        ))
+        .build();
     match handle {
         Ok(config) => {
             info!("Successfully loaded influx config!");
-            
+
             // spin up influx publisher and publish data
             let mut upload_manager = UploadManager::new(config);
             if matches.opt_present("disable_upload") {
@@ -166,13 +198,12 @@ async fn main() -> Result<(), Error> {
                 // TODO: complete this function
                 // let _ = upload_manager.get_uploaded_activity_ids();
             }
-        },
+        }
         Err(error) => {
             error!("Error loading influxdb config: {:}", error);
-            return Err(Into::into(error))
+            return Err(Into::into(error));
         }
     }
 
     Ok(())
-
 }

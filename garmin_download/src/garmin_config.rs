@@ -1,16 +1,15 @@
-
 use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Domain {
-    pub domain: String
+    pub domain: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Credentials {
     pub user: String,
     pub secure_password: bool,
-    pub password: String
+    pub password: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -23,13 +22,13 @@ pub struct DataConfig {
     pub hydration_start_date: String,
     pub activity_start_date: String,
     pub download_today_data: bool,
-    pub num_days_from_start_date: u64
+    pub num_days_from_start_date: u64,
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct ActivityConfig {
     pub num_activities_to_download: String,
-    pub save_regardless_of_date: bool
+    pub save_regardless_of_date: bool,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -37,7 +36,7 @@ pub struct FileConfig {
     pub file_date_format: String,
     pub file_base_path: String,
     pub save_to_file: bool,
-    pub overwrite: bool
+    pub overwrite: bool,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -48,7 +47,7 @@ pub struct EnabledStats {
     pub rhr: bool,
     pub weight: bool,
     pub activities: bool,
-    pub hydration: bool
+    pub hydration: bool,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -58,5 +57,5 @@ pub struct GarminConfig {
     pub data: DataConfig,
     pub activities: ActivityConfig,
     pub file: FileConfig,
-    pub enabled_stats: EnabledStats
+    pub enabled_stats: EnabledStats,
 }

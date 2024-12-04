@@ -5,6 +5,7 @@ from datetime import timedelta
 import subprocess
 import datetime
 import json
+import time
 
 if __name__ == '__main__':
     # run this script at 5am to download/upload previous day of data.
@@ -18,7 +19,13 @@ if __name__ == '__main__':
 
     # remove the session file in case the expiration date is more than 1 day
     try:
-        os.remove(".garmin_session.json")
+        with open(".garmin_session.json") as f:
+            contents = json.load(f)
+        if time.time() > int(contents['expires_at']):
+            print("Removing state session file")
+            os.remove(".garmin_session.json")
+        else:
+            print("Found valid session file!")
     except FileNotFoundError:
         pass
 
@@ -67,9 +74,3 @@ if __name__ == '__main__':
     print(f"Executing command:\n\n{' '.join(exe)}\n")
     output = subprocess.run(exe, capture_output=True)
     print(output.stdout)
-
-    # remove the session file in case the expiration date is more than 1 day
-    try:
-        os.remove(".garmin_session.json")
-    except FileNotFoundError:
-        pass
